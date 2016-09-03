@@ -61,7 +61,7 @@ struct Function2UniquePtr : public std::unique_ptr<Function2<R,T0,T1>>
                        std::is_same<typename std::result_of<
                        U(const T0&, const T1&)>::type , R>::value &&
                        !std::is_same<std::nullptr_t, U>::value>::type>
-    Function2UniquePtr(U fp) :
+    Function2UniquePtr(U&& fp) :
         std::unique_ptr<Function2<R,T0,T1>>(make_unique<Function2<R,T0,T1>>(std::move(fp)))
     {}
 };

@@ -4,9 +4,9 @@ CONFIG -= qt
 QMAKE_CXXFLAGS = -std=c++11
 SOURCES += main.cpp
 
-LIBS += -lpthread
 LIBS += -lgtest_main
 LIBS += -lgtest
+LIBS += -pthread
 
 INCLUDEPATH += ../src/operators
 INCLUDEPATH += ../src/schedulers
@@ -34,5 +34,7 @@ HEADERS += \
     ../src/SubscriptionsList.hpp \
     ../src/utils/Util.hpp \
     ../src/operators/OperatorTake.hpp \
-    ../src/utils/MTQueue.h \
-    ../src/Producer.hpp
+    ../src/Producer.hpp \
+    ../src/operators/OperatorObserveOn.hpp \
+    ../src/utils/MTQueue.hpp \
+    ../src/utils/ThreadPoolExecutor.hpp

@@ -11,6 +11,8 @@ struct SubscriptionBase : std::enable_shared_from_this<SubscriptionBase>
     virtual void unsubscribe() = 0;
 };
 
+using SubscriptionPtrType = std::shared_ptr<SubscriptionBase>;
+
 class WeekSubscription : public SubscriptionBase
 {
 public:

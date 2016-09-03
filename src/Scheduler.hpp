@@ -12,7 +12,6 @@ public:
     class Worker
     {
     public:
-        using ActionRefType = std::shared_ptr<Action0>;
         virtual ~Worker() = default;
         virtual void schedule(ActionRefType action) = 0;
         virtual SharedSubscription getSubscription() = 0;

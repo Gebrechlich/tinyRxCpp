@@ -2,6 +2,7 @@
 #define FUNCTIONS_H
 #include <functional>
 #include <iostream>
+#include <memory>
 
 using Action0_t = std::function<void(void)>;
 
@@ -45,6 +46,8 @@ struct Action0 : public Function
         }
     }
 };
+
+using ActionRefType = std::shared_ptr<Action0>;
 
 template<typename T>
 struct Action1 : public Function

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <memory>
 #include "Observable.hpp"
 #include "SchedulersFactory.hpp"
 #include <gtest/gtest.h>
@@ -14,7 +15,7 @@ struct some_exception {
     }
 
     some_exception(const some_exception & e): v(e.v) {
-         std::cout << " copy ctor" << std::endl;
+        std::cout << " copy ctor" << std::endl;
     }
 
     int v;
@@ -100,7 +101,18 @@ TEST(RxCppTest, Map)
         os << i;
         return os.str();
     }).subscribe([&](const string& s){
-        str = "str"+s;});
+        str = "str" + s;});
+
+    ASSERT_EQ("str100", str);
+
+    Function1UniquePtr<std::string, int> f = [&](const int& i){
+        std::ostringstream os;
+        os << i;
+        return os.str();
+    };
+
+    values.map(std::move(f)).subscribe([&](const string& s){
+        str = "str" + s;});
 
     ASSERT_EQ("str100", str);
 }
@@ -278,10 +290,10 @@ TEST(RxCppTest, Reduce)
     ).subscribe([&](const int& i){
         res = i;});
 
-     ASSERT_EQ(6, res);
+    ASSERT_EQ(6, res);
 
     values.reduce(std::unique_ptr<Function2<int,int,int>>(new ReduceFunction())
-    ).subscribe([&](const int& i){
+                  ).subscribe([&](const int& i){
         res = i;});
 
     ASSERT_EQ(6, res);
@@ -296,13 +308,13 @@ int inc()
 TEST(RxCppTest, Defer)
 {
     auto values = Observable<int>::defer([](){
-          return Observable<int>::just(inc());
+        return Observable<int>::just(inc());
     });
 
     int res = 0;
 
     values.subscribe([&](const int& i){
-         res = i;});
+        res = i;});
     ASSERT_EQ(1, res);
     values.subscribe([&](const int& i){
         res = i;});
@@ -312,6 +324,101 @@ TEST(RxCppTest, Defer)
     ASSERT_EQ(3, res);
 }
 
+TEST(RxCppTest, ToMap)
+{
+    auto values = Observable<int>::
+            create([](const Observable<int>::ThisSubscriberPtrType& t)
+    {
+        t->onNext(1);
+        t->onComplete();
+    });
+
+    int v1 = 0;
+
+    Function1UniquePtr<int, int> keySelector = [](const int& i){
+        return i * 10;
+    };
+
+    Function1UniquePtr<int, int> valueSelector = [](const int& i){
+        return i;
+    };
+
+    values.toMap(std::move(keySelector), std::move(valueSelector))
+            .subscribe([&](const std::map<int, int>& m){
+        auto it = m.find(10);
+        if(it != m.end())
+        {
+            v1 = (*it).second;
+        }
+    });
+
+    ASSERT_EQ(1, v1);
+
+    values.toMap([](const int& i){
+        return i * 10;
+    }, [](const int& i){
+        return i;
+    }).subscribe([&](const std::map<int, int>& m){
+        auto it = m.find(10);
+        if(it != m.end())
+        {
+            v1 = (*it).second;
+        }
+    });
+
+    ASSERT_EQ(1, v1);
+}
+
+TEST(RxCppTest, ToMapPrev)
+{
+    auto values = Observable<int>::
+            create([](const Observable<int>::ThisSubscriberPtrType& t)
+    {
+        t->onNext(1);
+        t->onComplete();
+    });
+
+    int v1 = 0;
+
+    Function1UniquePtr<int, int> keySelector = [](const int& i){
+        return i * 10;
+    };
+
+    Function1UniquePtr<int, int> valueSelector = [](const int& i){
+        return i;
+    };
+
+    Function2UniquePtr<int, int, int> valuePrevSelector = [](const int& prev, const int&){
+        return prev + 10;
+    };
+
+    values.toMap(std::move(keySelector), std::move(valueSelector), std::move(valuePrevSelector))
+            .subscribe([&](const std::map<int, int>& m){
+        auto it = m.find(10);
+        if(it != m.end())
+        {
+            v1 = (*it).second;
+        }
+    });
+
+    ASSERT_EQ(11, v1);
+
+    values.toMap([](const int& i){
+        return i * 10;
+    }, [](const int& i){
+        return i;
+    },[](const int& prev, const int&){
+        return prev + 10;
+    }).subscribe([&](const std::map<int, int>& m){
+        auto it = m.find(10);
+        if(it != m.end())
+        {
+            v1 = (*it).second;
+        }
+    });
+
+    ASSERT_EQ(11, v1);
+}
 
 int main(int argc, char **argv)
 {

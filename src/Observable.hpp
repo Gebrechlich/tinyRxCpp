@@ -10,9 +10,10 @@
 #include "OperatorScan.hpp"
 #include "OperatorLast.hpp"
 #include "OperatorTake.hpp"
+#include "OperatorObserveOn.hpp"
+#include "OperatorToMap.hpp"
 #include "FunctionsPtr.hpp"
 #include "Scheduler.hpp"
-#include "MTQueue.h"
 #include "Util.hpp"
 #include <memory>
 #include <initializer_list>
@@ -69,9 +70,11 @@ public:
     using ThisOnSubscribePtrType = std::shared_ptr<OnSubscribe>;
 
     Observable() = default;
+    ~Observable() = default;
 
     Observable(ThisOnSubscribePtrType f) : onSubscribe(std::move(f))
-    {}
+    {
+    }
 
     static Observable<T> create(ThisOnSubscribePtrType f)
     {
@@ -83,7 +86,7 @@ public:
         return Observable(ThisOnSubscribePtrType(std::make_shared<OnSubscribe>(action)));
     }
 
-    static Observable<T> just(std::initializer_list<T> initList)
+    static Observable<T> just(std::vector<T> initList)
     {
         return Observable<T>::create([initList](const Observable<T>::
                                      ThisSubscriberPtrType& subscriber)
@@ -164,7 +167,11 @@ public:
 
     Observable<T> subscribeOn(Scheduler::SchedulerRefType&& scheduler);
 
-    Observable<T> observeOn(Scheduler::SchedulerRefType&& scheduler);
+    Observable<T> observeOn(Scheduler::SchedulerRefType&& scheduler)
+    {
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorObserveOn<T>>(std::move(scheduler))),
+                    this->onSubscribe);
+    }
 
     template<typename R, typename P>
     Observable<P> lift(std::unique_ptr<Operator<R, P>>&& o, std::shared_ptr<OnSubscribeBase<R>> onSubs)
@@ -173,43 +180,46 @@ public:
         return Observable<P>(sp);
     }
 
+    template<typename R, typename P>
+    Observable<P> lift(std::unique_ptr<Operator<R, P>>&& o)
+    {
+        std::shared_ptr<OnSubscribeBase<P>> sp(std::make_shared<LiftOnSubscribe<P, R>>(this->onSubscribe, std::move(o)));
+        return Observable<P>(sp);
+    }
+
     Observable<T> filter(Predicat<T>&& pred)
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorFilter<T>>(std::move(pred))),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorFilter<T>>(std::move(pred))));
     }
 
     Observable<T> distinct()
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDistinct<T,T>>(asIs<T>)),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDistinct<T,T>>(asIs<T>)));
     }
 
     template<typename R>
-    Observable<T> distinctTo(Function1_t<R, T>&& keyGenerator)
+    Observable<T> distinct(Function1_t<R, T>&& keyGenerator)
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDistinct<T,R>>(std::move(keyGenerator))),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDistinct<T,R>>(std::move(keyGenerator))));
     }
 
     template<typename R>
     Observable<T> distinct(R&& fun)
     {
-        return distinctTo<typename std::result_of<R(const T&)>::type>(std::move(fun));
+        return distinct<typename std::result_of<R(const T&)>::type>(std::move(fun));
     }
 
     Observable<T> take(size_t index)
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorTake<T>>(index)),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorTake<T>>(index)));
     }
 
     template<typename R>
     Observable<R> map(Function1UniquePtr<R, T>&& fun)
     {
-        return lift(std::unique_ptr<Operator<T, R>>(make_unique<OperatorMap<T, R>>(std::move(fun))),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, R>>(make_unique<OperatorMap<T, R>>(std::move(fun))));
     }
+
 
     template<typename R>
     Observable<typename std::result_of<R(const T&)>::type> map(R&& fun)
@@ -217,35 +227,65 @@ public:
         return map<typename std::result_of<R(const T&)>::type>(std::move(fun));
     }
 
+    template<typename K, typename V>
+    Observable<std::map<K,V>> toMap(Function1UniquePtr<K, T>&& keySelector,
+                                    Function1UniquePtr<V, T>&& valueSelector)
+    {
+        return lift(std::unique_ptr<Operator<T,
+                    std::map<K,V>>>(make_unique<OperatorToMap<T, K, V>>(std::move(keySelector),
+                    std::move(valueSelector))));
+    }
+
+    template<typename Ks, typename Vs>
+    Observable<std::map<typename std::result_of<Ks(const T&)>::type,
+    typename std::result_of<Vs(const T&)>::type>> toMap(Ks&& keySelector, Vs&& valueSelector)
+    {
+        return toMap<typename std::result_of<Ks(const T&)>::type, typename std::result_of<Vs(const T&)>::type>
+                                                           (std::move(keySelector), std::move(valueSelector));
+    }
+
+    template<typename K, typename V>
+    Observable<std::map<K,V>> toMap(Function1UniquePtr<K, T>&& keySelector,
+                                    Function1UniquePtr<V, T>&& valueSelector,
+                                    Function2UniquePtr<V, V, V>&& valuePrevSelector)
+    {
+        return lift(std::unique_ptr<Operator<T,
+                    std::map<K,V>>>(make_unique<OperatorToMap<T, K, V>>(std::move(keySelector),
+                    std::move(valueSelector), std::move(valuePrevSelector))));
+    }
+
+    template<typename Ks, typename Vs, typename Vps>
+    Observable<std::map<typename std::result_of<Ks(const T&)>::type,
+    typename std::result_of<Vs(const T&)>::type>> toMap(Ks&& keySelector, Vs&& valueSelector, Vps&& vpSelector)
+    {
+        return toMap<typename std::result_of<Ks(const T&)>::type, typename std::result_of<Vs(const T&)>::type>
+                                               (std::move(keySelector), std::move(valueSelector), std::move(vpSelector));
+    }
+
     Observable<bool> all(Predicat<T>&& pred)
     {
-        return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorAll<T>>(std::move(pred))),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorAll<T>>(std::move(pred))));
     }
 
     Observable<bool> exist(Predicat<T>&& pred)
     {
-        return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorExist<T>>(std::move(pred))),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorExist<T>>(std::move(pred))));
     }
 
     Observable<T> scan(Function2UniquePtr<T,T,T>&& accumulator)
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorScan<T, T>>(std::move(accumulator))),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorScan<T, T>>(std::move(accumulator))));
     }
 
     Observable<T> scan(Function2UniquePtr<T,T,T>&& accumulator, Function0UniquePtr<T>&& seed)
     {
         return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorScan<T, T>>(std::move(accumulator),
-                                                                           std::move(seed))),
-                    this->onSubscribe);
+                                                                           std::move(seed))));
     }
 
     Observable<T> last()
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorLast<T>>()),
-                    this->onSubscribe);
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorLast<T>>()));
     }
 
     Observable<T> reduce(Function2UniquePtr<T,T,T>&& accumulator)
@@ -306,22 +346,24 @@ template<typename T>
 class OperatorSubscribeOn : public OnSubscribeBase<T>
 {
 public:
-    OperatorSubscribeOn(Observable<T>& source, Scheduler::SchedulerRefType&& s) :
+    using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
+
+    OperatorSubscribeOn(OnSubscribePtrType source, Scheduler::SchedulerRefType&& s) :
         source(source), scheduler(std::move(s))
     {}
 
     class ThreadAction : public Action0
     {
     public:
-        ThreadAction(Observable<T>& source, const SubscriberPtrType<T>& subscriber)
+        ThreadAction(OnSubscribePtrType source, const SubscriberPtrType<T>& subscriber)
             : source(source), subscriber(subscriber)
         {}
         void operator()() override
         {
-            source.subscribe(subscriber);
+            (*source)(subscriber);
         }
     private:
-        Observable<T>& source;
+        OnSubscribePtrType source;
         SubscriberPtrType<T> subscriber;
     };
 
@@ -330,10 +372,10 @@ public:
         worker = std::move(scheduler->createWorker());
         auto subscription = worker->getSubscription();
         subscriber->add(subscription);
-        worker->schedule(std::unique_ptr<Action0>(make_unique<ThreadAction>(source, subscriber)));
+        worker->schedule(std::unique_ptr<Action0>(make_unique<ThreadAction>(source, subscriber)));;
     }
 private:
-    Observable<T>& source;
+    OnSubscribePtrType source;
     Scheduler::SchedulerRefType scheduler;
     Scheduler::WorkerRefType worker;
 };
@@ -342,86 +384,7 @@ template<typename T>
 Observable<T> Observable<T>::subscribeOn(Scheduler::SchedulerRefType&& scheduler)
 {
     return create(std::shared_ptr<Observable<T>::OnSubscribe>(
-                      std::make_shared<OperatorSubscribeOn<T>>(*this, std::move(scheduler))));
+                      std::make_shared<OperatorSubscribeOn<T>>(this->onSubscribe, std::move(scheduler))));
 }
 
-template<typename T>
-class OperatorObserveOn : public Operator<T,T>
-{
-    using SourceSubscriberType = std::shared_ptr<Subscriber<T>>;
-    using ThisSubscriberType = typename CompositeSubscriber<T,T>::ChildSubscriberType;
-
-    struct ObserveOnSubscriber : public CompositeSubscriber<T,T>
-    {
-        struct ThreadAction : public Action0
-        {
-            ThreadAction(const ThisSubscriberType& c, const std::shared_ptr<MTQueue<T>>& q,
-                         std::shared_ptr<SubscriptionBase>&& s) : child(c), queue(q), subscription(std::move(s))
-            {}
-
-            void operator()() override
-            {
-                while(!subscription.isUnsubscribe())
-                {
-                    T v = (*queue).waitAndPop();
-                    child->onNext(v);
-                }
-            }
-
-            ThisSubscriberType child;
-            std::shared_ptr<MTQueue<T>> queue;
-            SharedSubscription subscription;
-        };
-
-        ObserveOnSubscriber(ThisSubscriberType p, Scheduler::SchedulerRefType&& s) :
-            CompositeSubscriber<T,T>(p), scheduler(std::move(s))
-        {
-            queue = std::make_shared<MTQueue<T>>();
-        }
-
-        void onNext(const T& t) override
-        {
-            if(!this->isUnsubscribe())
-            {
-                (*queue).push(t);
-            }
-        }
-
-        void onComplete() override
-        {
-        }
-
-        void init()
-        {
-            worker = std::move(scheduler->createWorker());
-            auto subscription = worker->getSubscription();
-            this->child->add(subscription);
-            this->addChildSubscriptionFromThis();
-            worker->schedule(std::make_shared<ThreadAction>(this->child, queue, this->shared_from_this()));
-        }
-
-        Scheduler::SchedulerRefType scheduler;
-        Scheduler::WorkerRefType worker;
-        std::shared_ptr<MTQueue<T>> queue;
-    };
-public:
-    OperatorObserveOn(Scheduler::SchedulerRefType&& s) : scheduler(std::move(s))
-    {}
-
-    SourceSubscriberType operator()(const ThisSubscriberType& t) override
-    {
-        auto subs = std::make_shared<ObserveOnSubscriber>(t, std::move(scheduler));
-        subs->init();
-        return subs;
-    }
-private:
-    Scheduler::SchedulerRefType scheduler;
-};
-
-template<typename T>
-Observable<T> Observable<T>::observeOn(Scheduler::SchedulerRefType&& scheduler)
-{
-    return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorObserveOn<T>>(std::move(scheduler))),
-                this->onSubscribe);
-}
 #endif // OBSERVABLE_H
