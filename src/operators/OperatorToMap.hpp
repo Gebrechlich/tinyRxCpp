@@ -24,8 +24,8 @@ class OperatorToMap : public Operator<T, std::map<K, V>>
 
         void onNext(const T& t) override
         {
-            auto value = (*valueSelector)(t);
             auto key = (*keySelector)(t);
+            auto value = (*valueSelector)(t);
             if(valuePrevSelector)
             {
                 auto prev = (map.find(key) == map.end() ? value : map[key]);

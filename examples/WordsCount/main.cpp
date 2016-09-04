@@ -1,7 +1,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <sstream>
 #include <fstream>
 #include "Observable.hpp"
 #include "SchedulersFactory.hpp"
@@ -9,13 +8,6 @@
 #include <map>
 
 using namespace std;
-
-std::string intToString(const int& i)
-{
-    std::ostringstream os;
-    os << i;
-    return os.str();
-}
 
 #define FILE_NAME "test.txt"
 
@@ -43,17 +35,19 @@ class WordSplitOperator : public Operator<T,T>
         void onNext(const T& t) override
         {
             std::string word;
+            char prev = ' ';
             for(auto c: t)
             {
-                if(isalpha(c))
+                if(isalpha(c) || (prev != ' ' && c == '\''))
                 {
-                    word.push_back(c);
+                    word.push_back(std::tolower(c));
                 }
                 else if(c == ' ')
                 {
                     this->child->onNext(word);
                     word.clear();
                 }
+                prev = c;
             }
         }
     };

@@ -227,6 +227,7 @@ public:
         return map<typename std::result_of<R(const T&)>::type>(std::move(fun));
     }
 
+
     template<typename K, typename V>
     Observable<std::map<K,V>> toMap(Function1UniquePtr<K, T>&& keySelector,
                                     Function1UniquePtr<V, T>&& valueSelector)
@@ -242,6 +243,20 @@ public:
     {
         return toMap<typename std::result_of<Ks(const T&)>::type, typename std::result_of<Vs(const T&)>::type>
                                                            (std::move(keySelector), std::move(valueSelector));
+    }
+
+    template<typename K>
+    Observable<std::map<K,T>> toMap(Function1UniquePtr<K, T>&& keySelector)
+    {
+         return lift(std::unique_ptr<Operator<T,
+                     std::map<K,T>>>(make_unique<OperatorToMap<T, K, T>>(std::move(keySelector),
+                                     Function1UniquePtr<T,T>([](const T& t){return t;}))));
+    }
+
+    template<typename Ks>
+    Observable<std::map<typename std::result_of<Ks(const T&)>::type, T>> toMap(Ks&& keySelector)
+    {
+         return toMap<typename std::result_of<Ks(const T&)>::type>(std::move(keySelector));
     }
 
     template<typename K, typename V>

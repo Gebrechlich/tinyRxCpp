@@ -37,4 +37,5 @@ HEADERS += \
     ../src/Producer.hpp \
     ../src/operators/OperatorObserveOn.hpp \
     ../src/utils/MTQueue.hpp \
-    ../src/utils/ThreadPoolExecutor.hpp
+    ../src/utils/ThreadPoolExecutor.hpp \
+    ../src/operators/OperatorToMap.hpp

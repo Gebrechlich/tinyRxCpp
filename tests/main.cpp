@@ -324,7 +324,7 @@ TEST(RxCppTest, Defer)
     ASSERT_EQ(3, res);
 }
 
-TEST(RxCppTest, ToMap)
+TEST(RxCppTest, ToMapKSelector)
 {
     auto values = Observable<int>::
             create([](const Observable<int>::ThisSubscriberPtrType& t)
@@ -339,11 +339,7 @@ TEST(RxCppTest, ToMap)
         return i * 10;
     };
 
-    Function1UniquePtr<int, int> valueSelector = [](const int& i){
-        return i;
-    };
-
-    values.toMap(std::move(keySelector), std::move(valueSelector))
+    values.toMap(std::move(keySelector))
             .subscribe([&](const std::map<int, int>& m){
         auto it = m.find(10);
         if(it != m.end())
@@ -356,8 +352,6 @@ TEST(RxCppTest, ToMap)
 
     values.toMap([](const int& i){
         return i * 10;
-    }, [](const int& i){
-        return i;
     }).subscribe([&](const std::map<int, int>& m){
         auto it = m.find(10);
         if(it != m.end())
@@ -369,7 +363,53 @@ TEST(RxCppTest, ToMap)
     ASSERT_EQ(1, v1);
 }
 
-TEST(RxCppTest, ToMapPrev)
+
+TEST(RxCppTest, ToMapKVSelector)
+{
+    auto values = Observable<std::string>::
+            create([](const Observable<std::string>::ThisSubscriberPtrType& t)
+    {
+        t->onNext("aaaaa");
+        t->onComplete();
+    });
+
+    size_t v1 = 0;
+
+    Function1UniquePtr<char, std::string> keySelector = [](const std::string& s){
+        return s.at(0);
+    };
+
+    Function1UniquePtr<size_t, std::string> valueSelector = [](const std::string& s){
+        return s.length();
+    };
+
+    values.toMap(std::move(keySelector), std::move(valueSelector))
+            .subscribe([&](const std::map<char, size_t>& m){
+        auto it = m.find('a');
+        if(it != m.end())
+        {
+            v1 = (*it).second;
+        }
+    });
+
+    ASSERT_EQ(5, v1);
+
+    values.toMap([](const std::string& s){
+        return s.at(0);
+    }, [](const std::string& s){
+        return s.length();
+    }).subscribe([&](const std::map<char, size_t>& m){
+        auto it = m.find('a');
+        if(it != m.end())
+        {
+            v1 = (*it).second;
+        }
+    });
+
+    ASSERT_EQ(5, v1);
+}
+
+TEST(RxCppTest, ToMapKVPSelector)
 {
     auto values = Observable<int>::
             create([](const Observable<int>::ThisSubscriberPtrType& t)
