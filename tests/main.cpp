@@ -460,6 +460,29 @@ TEST(RxCppTest, ToMapKVPSelector)
     ASSERT_EQ(11, v1);
 }
 
+TEST(RxCppTest, ConcatMap)
+{
+    Function1UniquePtr<Observable<int>,int> mapper
+             = [](const int& i){
+        return Observable<int>::just({1*i,2*i});
+    };
+
+    auto values = Observable<int>::just({100,1000});
+
+    std::vector<int> result;
+
+    values.concatMap(std::move(mapper))
+    .subscribe([&](const int& i){
+        result.push_back(i);
+    });
+
+    ASSERT_EQ(100, result[0]);
+    ASSERT_EQ(200, result[1]);
+    ASSERT_EQ(1000, result[2]);
+    ASSERT_EQ(2000, result[3]);
+
+}
+
 int main(int argc, char **argv)
 {
     testing::InitGoogleTest(&argc, argv);

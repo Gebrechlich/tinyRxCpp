@@ -60,6 +60,9 @@ class OperatorSubscribeOn;
 template<typename T>
 class OperatorObserveOn;
 
+template<typename T, typename R>
+class OnSubscribeConcatMap;
+
 template<typename T>
 class Observable
 {
@@ -308,6 +311,9 @@ public:
         return scan(std::move(accumulator)).last();
     }
 
+    template<typename R>
+    Observable<R> concatMap(Function1UniquePtr<Observable<R>,T>&& mapper);
+
 protected:
     template<typename B>
     static WeekSubscription subscribe(SubscriberPtrType<B> subscriber,
@@ -401,5 +407,61 @@ Observable<T> Observable<T>::subscribeOn(Scheduler::SchedulerRefType&& scheduler
     return create(std::shared_ptr<Observable<T>::OnSubscribe>(
                       std::make_shared<OperatorSubscribeOn<T>>(this->onSubscribe, std::move(scheduler))));
 }
+
+template<typename T, typename R>
+class OnSubscribeConcatMap : public OnSubscribeBase<T>
+{
+public:
+    using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
+    using MapperType = std::unique_ptr<Function1<Observable<R>,T>>;   //TODO replace with shared ptr
+    using ThisChildSubscriberType = typename CompositeSubscriber<T,R>::ChildSubscriberType;
+
+    struct ConcatMapSubscriber : public CompositeSubscriber<T,R>
+    {
+        ConcatMapSubscriber(ThisChildSubscriberType child, MapperType mapper) :
+            CompositeSubscriber<T,R>(child), mapper(std::move(mapper))
+        {}
+
+        void onNext(const T& t) override
+        {
+            auto obs = (*mapper)(t);
+            obs.subscribe(this->child);
+        }
+
+//        void onError(std::exception_ptr ex) override
+//        {
+//        }
+
+//        void onComplete() override
+//        {
+//        }
+
+        MapperType mapper;
+    };
+
+
+    OnSubscribeConcatMap(OnSubscribePtrType source, MapperType mapper) : source(source)
+      ,mapper(std::move(mapper))
+    {
+    }
+
+    void operator()(const SubscriberPtrType<R>& s) override
+    {
+        std::shared_ptr<ConcatMapSubscriber> parent = std::make_shared<ConcatMapSubscriber>(s, std::move(mapper));
+        (*source)(parent);
+    }
+
+private:
+    OnSubscribePtrType source;
+    MapperType mapper;
+};
+
+template<typename T>
+template<typename R>
+Observable<R> Observable<T>::concatMap(Function1UniquePtr<Observable<R>,T>&& mapper)
+{
+    return create(std::make_shared<OnSubscribeConcatMap<T,R>>(this->onSubscribe, std::move(mapper)));
+}
+
 
 #endif // OBSERVABLE_H

@@ -59,7 +59,7 @@ class CompositeSubscriber : public Subscriber<T>
 public:
     using ChildSubscriberType = std::shared_ptr<Subscriber<U>>;
 
-    CompositeSubscriber(ChildSubscriberType ptr) : Subscriber<T>(), child(std::move(ptr))
+    CompositeSubscriber(ChildSubscriberType ptr) : Subscriber<T>(), child(ptr)
     {}
 
     void onError(std::exception_ptr ex) override
