@@ -12,6 +12,7 @@
 #include "OperatorTake.hpp"
 #include "OperatorObserveOn.hpp"
 #include "OperatorToMap.hpp"
+#include "OperatorDoOnEach.hpp"
 #include "FunctionsPtr.hpp"
 #include "Scheduler.hpp"
 #include "Util.hpp"
@@ -217,6 +218,14 @@ public:
         return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorTake<T>>(index)));
     }
 
+    Observable<T> doOnNext(Action1RefType<T> onNext)
+    {
+        ActionRefType onComplete = std::make_shared<Action0>();
+        Action1RefType<std::exception_ptr> onError = std::make_shared<Action1<std::exception_ptr>>();
+
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDoOnEach<T>>(onNext,onError,onComplete)));
+    }
+
     template<typename R>
     Observable<R> map(Function1UniquePtr<R, T>&& fun)
     {
@@ -416,29 +425,77 @@ public:
     using MapperType = std::unique_ptr<Function1<Observable<R>,T>>;   //TODO replace with shared ptr
     using ThisChildSubscriberType = typename CompositeSubscriber<T,R>::ChildSubscriberType;
 
+    struct InnerConcatMapSubscriber;
+
     struct ConcatMapSubscriber : public CompositeSubscriber<T,R>
     {
         ConcatMapSubscriber(ThisChildSubscriberType child, MapperType mapper) :
-            CompositeSubscriber<T,R>(child), mapper(std::move(mapper))
+            CompositeSubscriber<T,R>(child), mapper(std::move(mapper)), requested(0)
         {}
 
         void onNext(const T& t) override
         {
-            auto obs = (*mapper)(t);
-            obs.subscribe(this->child);
+            ++requested;
+            if(!this->isUnsubscribe())
+            {
+                auto obs = (*mapper)(t);
+                std::shared_ptr<Subscriber<T>> innerSubscriber = std::make_shared<InnerConcatMapSubscriber>
+                        (std::dynamic_pointer_cast<ConcatMapSubscriber>(this->shared_from_this()));
+                obs.subscribe(innerSubscriber);
+            }
         }
 
-//        void onError(std::exception_ptr ex) override
-//        {
-//        }
+        void onNextInner(const T& t)
+        {
+            this->child->onNext(t);
+        }
 
-//        void onComplete() override
-//        {
-//        }
+        void onErrorInner(std::exception_ptr ex)
+        {
+            this->child->onError(ex);
+        }
+
+        void onCompleteInner()
+        {
+            --requested;
+            if(isDone && requested.load() == 0)
+            {
+                this->child->onComplete();
+            }
+        }
+
+        void onComplete() override
+        {
+            isDone = true;
+        }
 
         MapperType mapper;
+        std::atomic_int requested;
+        volatile bool isDone = false;
     };
 
+    struct InnerConcatMapSubscriber : public Subscriber<T>
+    {
+        InnerConcatMapSubscriber(std::shared_ptr<ConcatMapSubscriber> child) : child(child)
+        {}
+
+        void onNext(const T& t) override
+        {
+            child->onNextInner(t);
+        }
+
+        void onError(std::exception_ptr ex) override
+        {
+            child->onErrorInner(ex);
+        }
+
+        void onComplete() override
+        {
+            child->onCompleteInner();
+        }
+
+        std::shared_ptr<ConcatMapSubscriber> child;
+    };
 
     OnSubscribeConcatMap(OnSubscribePtrType source, MapperType mapper) : source(source)
       ,mapper(std::move(mapper))
@@ -447,8 +504,16 @@ public:
 
     void operator()(const SubscriberPtrType<R>& s) override
     {
+        if(s == nullptr)
+        {
+            return;
+        }
         std::shared_ptr<ConcatMapSubscriber> parent = std::make_shared<ConcatMapSubscriber>(s, std::move(mapper));
-        (*source)(parent);
+        s->add(SharedSubscription(parent));
+        if(!s->isUnsubscribe())
+        {
+            (*source)(parent);
+        }
     }
 
 private:

@@ -70,6 +70,8 @@ struct Action1 : public Function
     }
 };
 
+template<typename T>
+using Action1RefType = std::shared_ptr<Action1<T>>;
 
 template<typename R>
 struct Function0 : public Function
