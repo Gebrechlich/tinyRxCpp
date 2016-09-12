@@ -63,6 +63,7 @@ public:
     virtual ~ThreadPoolExecutor()
     {
         done.store(true);
+        submitLock.lock();
         for(size_t i = 0; i < workers.size(); ++i)
         {
             if(workers[i].joinable())
@@ -70,12 +71,15 @@ public:
                 workers[i].join();
             }
         }
+        submitLock.unlock();
     }
 
     ScheduledActionType submit(T&& action)
     {
+        submitLock.lock();
         auto schedAction = std::make_shared<ScheduledAction<T>>(std::move(action));
         actions.push(schedAction);
+        submitLock.unlock();
         return schedAction;
     }
 
@@ -86,16 +90,21 @@ public:
 private:
     virtual void run()
     {
-        while(!done.load())
+        while(true)
         {
             ScheduledActionType action;
             if(actions.waitForAndPop(action, std::chrono::seconds(TIMEOUT)))
             {
                 (*action)();
             }
+            bool isDone = done.load();
+            if(isDone)
+            {
+                return;
+            }
         }
     }
-
+    std::mutex submitLock;
     std::atomic<bool> done;
     MTQueue<ScheduledActionType> actions;
     std::vector<std::thread> workers;

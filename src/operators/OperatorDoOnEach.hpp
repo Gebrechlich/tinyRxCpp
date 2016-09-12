@@ -48,6 +48,7 @@ public:
     SourceSubscriberType operator()(const ThisSubscriberType& t) override
     {
         auto subs = std::make_shared<DoOnEachSubscriber>(t, onNext, onError, onComplete);
+        subs->addChildSubscriptionFromThis();
         return subs;
     }
 private:

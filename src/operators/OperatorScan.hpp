@@ -2,7 +2,7 @@
 #define OPERATORSCAN
 
 #include "Operator.hpp"
-#include "FunctionsPtr.hpp"
+#include "Functions.hpp"
 #include <utility>
 
 template<typename T, typename R>

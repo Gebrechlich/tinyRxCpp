@@ -13,7 +13,7 @@
 #include "OperatorObserveOn.hpp"
 #include "OperatorToMap.hpp"
 #include "OperatorDoOnEach.hpp"
-#include "FunctionsPtr.hpp"
+#include "Functions.hpp"
 #include "Scheduler.hpp"
 #include "Util.hpp"
 #include <memory>
@@ -61,9 +61,6 @@ class OperatorSubscribeOn;
 template<typename T>
 class OperatorObserveOn;
 
-template<typename T, typename R>
-class OnSubscribeConcatMap;
-
 template<typename T>
 class Observable
 {
@@ -72,6 +69,9 @@ public:
     using ThisSubscriberPtrType = SubscriberPtrType<T>;
     using OnSubscribe = OnSubscribeBase<T>;
     using ThisOnSubscribePtrType = std::shared_ptr<OnSubscribe>;
+
+    template<typename U, typename R>
+    friend class OnSubscribeConcatMap;
 
     Observable() = default;
     ~Observable() = default;
@@ -323,6 +323,12 @@ public:
     template<typename R>
     Observable<R> concatMap(Function1UniquePtr<Observable<R>,T>&& mapper);
 
+    template<typename R>
+    typename std::result_of<R(const T&)>::type concatMap(R&& fun)
+    {
+        return concatMap<T>(std::move(fun));
+    }
+
 protected:
     template<typename B>
     static WeekSubscription subscribe(SubscriberPtrType<B> subscriber,
@@ -441,7 +447,9 @@ public:
                 auto obs = (*mapper)(t);
                 std::shared_ptr<Subscriber<T>> innerSubscriber = std::make_shared<InnerConcatMapSubscriber>
                         (std::dynamic_pointer_cast<ConcatMapSubscriber>(this->shared_from_this()));
+
                 obs.subscribe(innerSubscriber);
+                this->add(SharedSubscription(innerSubscriber));
             }
         }
 
@@ -458,20 +466,27 @@ public:
         void onCompleteInner()
         {
             --requested;
-            if(isDone && requested.load() == 0)
+            if(parentComplete && !done && requested.load() == 0)
             {
+                done = true;
                 this->child->onComplete();
             }
         }
 
         void onComplete() override
         {
-            isDone = true;
+            parentComplete = true;
+            if(requested.load() == 0 && !done)
+            {
+                done = true;
+                this->child->onComplete();
+            }
         }
 
         MapperType mapper;
         std::atomic_int requested;
-        volatile bool isDone = false;
+        volatile bool parentComplete = false;
+        volatile bool done = false;
     };
 
     struct InnerConcatMapSubscriber : public Subscriber<T>
