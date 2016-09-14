@@ -26,8 +26,7 @@ class OperatorObserveOn : public Operator<T,T>
             ThreadAction(const ThisSubscriberType& c, const std::shared_ptr<MTQueue<T>>& q,
                          SubscriptionBase& s, DoneState& st) : child(c), queue(q),
                 subscription(s), state(st)
-            {
-            }
+            {}
 
             void operator()() override
             {

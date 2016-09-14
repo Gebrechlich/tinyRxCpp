@@ -1,40 +1,39 @@
 #ifndef OPERATORTOMAP_HPP
 #define OPERATORTOMAP_HPP
 #include "Operator.hpp"
+#include <type_traits>
 #include <map>
 
-template<typename T, typename K, typename V>
-class OperatorToMap : public Operator<T, std::map<K, V>>
+template<typename T, typename KeySelector, typename ValueSelector>
+using MapT = std::map<typename std::result_of<KeySelector(const T&)>::type,
+                      typename std::result_of<ValueSelector(const T&)>::type>;
+
+template<typename T, typename KeySelector, typename ValueSelector, typename ValuePrevSelector>
+class OperatorToMap : public Operator<T, MapT<T,KeySelector,ValueSelector>>
 {
-    using SourceSubscriberType = std::shared_ptr<Subscriber<T>>;
-    using MapType =  std::map<K, V>;
-    using ThisSubscriberType = typename CompositeSubscriber<T, MapType>::ChildSubscriberType;
-    using KeySelector = std::unique_ptr<Function1<K, T>>;
-    using ValueSelector = std::unique_ptr<Function1<V, T>>;
-    using ValuePrevSelector = std::unique_ptr<Function2<V, V, V>>;
+    using KeyType               = typename std::result_of<KeySelector(const T&)>::type;
+    using ValueType             = typename std::result_of<ValueSelector(const T&)>::type;
+    using SourceSubscriberType  = std::shared_ptr<Subscriber<T>>;
+    using MapType               = MapT<T,KeySelector,ValueSelector>;
+    using ThisSubscriberType    = typename CompositeSubscriber<T, MapType>::ChildSubscriberType;
+    using KeySelectorType       = typename std::decay<KeySelector>::type;
+    using ValueSelectorType     = typename std::decay<ValueSelector>::type;
+    using ValuePrevSelectorType = typename std::decay<ValuePrevSelector>::type;
 
     struct ToMapSubscriber : public CompositeSubscriber<T, MapType>
     {
-        ToMapSubscriber(ThisSubscriberType p, KeySelector kSelector, ValueSelector vSelector
-                        ,ValuePrevSelector vpSelector = nullptr) :
+        ToMapSubscriber(ThisSubscriberType p, KeySelectorType&& kSelector, ValueSelectorType&& vSelector
+                        ,ValuePrevSelectorType&& vpSelector) :
             CompositeSubscriber<T, MapType>(p), keySelector(std::move(kSelector)),
             valueSelector(std::move(vSelector)), valuePrevSelector(std::move(vpSelector))
-        {
-        }
+        {}
 
         void onNext(const T& t) override
         {
             auto key = (*keySelector)(t);
             auto value = (*valueSelector)(t);
-            if(valuePrevSelector)
-            {
-                auto prev = (map.find(key) == map.end() ? value : map[key]);
-                map[key] = (*valuePrevSelector)(prev, value);
-            }
-            else
-            {
-                map[key] = value;
-            }
+            auto prev = (map.find(key) == map.end() ? value : map[key]);
+            map[key] = (*valuePrevSelector)(value, prev);
         }
 
         void onComplete() override
@@ -43,16 +42,15 @@ class OperatorToMap : public Operator<T, std::map<K, V>>
             this->child->onComplete();
         }
 
-        KeySelector keySelector;
-        ValueSelector valueSelector;
-        ValuePrevSelector valuePrevSelector;
+        KeySelectorType keySelector;
+        ValueSelectorType valueSelector;
+        ValuePrevSelectorType valuePrevSelector;
         MapType map;
-        bool prevPas;
     };
 
 public:
     OperatorToMap(){}
-    OperatorToMap(KeySelector kSelector, ValueSelector vSelector, ValuePrevSelector vpSelector = nullptr) : Operator<T, MapType>(),
+    OperatorToMap(KeySelectorType kSelector, ValueSelectorType vSelector, ValuePrevSelectorType vpSelector) : Operator<T, MapType>(),
         keySelector(std::move(kSelector)), valueSelector(std::move(vSelector)), valuePrevSelector(std::move(vpSelector))
     {}
 
@@ -64,9 +62,9 @@ public:
         return subs;
     }
 private:
-    KeySelector keySelector;
-    ValueSelector valueSelector;
-    ValuePrevSelector valuePrevSelector;
+    KeySelectorType keySelector;
+    ValueSelectorType valueSelector;
+    ValuePrevSelectorType valuePrevSelector;
 };
 
 #endif // OPERATORTOMAP_HPP

@@ -3,91 +3,64 @@
 
 #include "Operator.hpp"
 #include "Functions.hpp"
+#include <type_traits>
 #include <utility>
 
-template<typename T, typename R>
-class OperatorScan : public Operator<T, R>
+template<typename T, typename Accumulator>
+class OperatorScan : public Operator<T, typename std::result_of<Accumulator(const T&, const T&)>::type>
 {
+    using ResultType           = typename std::result_of<Accumulator(const T&, const T&)>::type;
     using SourceSubscriberType = std::shared_ptr<Subscriber<T>>;
-    using ThisSubscriberType = typename CompositeSubscriber<T,R>::ChildSubscriberType;
-    using AccumulatorType = std::unique_ptr<Function2<R,T,T>>;
+    using ThisSubscriberType   = typename CompositeSubscriber<T, ResultType>::ChildSubscriberType;
+    using AccumulatorType      = typename std::decay<Accumulator>::type;
 
-    struct ScanSubscriber : public CompositeSubscriber<T,R>
+    struct ScanSubscriber : public CompositeSubscriber<T, ResultType>
     {
-        ScanSubscriber(ThisSubscriberType p,
-                       AccumulatorType accumulator) :
-            CompositeSubscriber<T,R>(p), accumulator(std::move(accumulator))
-        {
-        }
+        ScanSubscriber(ThisSubscriberType p, AccumulatorType&& accumulator, T&& seed, bool useSeed) :
+            CompositeSubscriber<T, ResultType>(p), accumulator(std::move(accumulator)),
+            result(seed), useSeed(useSeed)
+        {}
 
         void onNext(const T& t) override
         {
-            if(!once)
+            if(!once && !useSeed)
             {
-                result = static_cast<R>(t);
+                result = t;
                 once = true;
             }
             else
             {
-                R v = (*accumulator)(result, t);
+                ResultType v = accumulator(result, t);
                 result = v;
             }
             this->child->onNext(result);
         }
 
         AccumulatorType accumulator;
+        ResultType result;
+        bool useSeed;
         bool once = false;
-        R result;
-    };
-
-    struct ScanSeedSubscriber : public ScanSubscriber
-    {
-        ScanSeedSubscriber(ThisSubscriberType p, AccumulatorType accumulator,
-                           Function0UniquePtr<R>&& seed) :
-            ScanSubscriber(p, std::move(accumulator)), seedScan(std::move(seed))
-        {
-            result = (*seedScan)();
-        }
-
-        void onNext(const T& t) override
-        {
-            R v = (*(this->accumulator))(result, t);
-            result = v;
-            this->child->onNext(result);
-        }
-
-        R result;
-        Function0UniquePtr<R> seedScan;
     };
 
 public:
-    OperatorScan(AccumulatorType accumulator) : Operator<T,R>(),
-        accumulator(std::move(accumulator)), seed(nullptr)
+    OperatorScan(const AccumulatorType& accumulator, T seed = T(), bool useSeed = false) : Operator<T,ResultType>(),
+        accumulator(accumulator), seed(std::move(seed)), useSeed(useSeed)
     {}
 
-    OperatorScan(AccumulatorType accumulator, Function0UniquePtr<R>&& seed) : Operator<T,R>(),
-        accumulator(std::move(accumulator)), seed(std::move(seed))
-    {
-    }
+    OperatorScan(AccumulatorType&& accumulator, T seed = T(), bool useSeed = false) : Operator<T,ResultType>(),
+        accumulator(std::move(accumulator)), seed(std::move(seed)), useSeed(useSeed)
+    {}
 
     SourceSubscriberType operator()(const ThisSubscriberType& t) override
     {
-        if(!seed)
-        {
-            auto subs = std::make_shared<ScanSubscriber>(t, std::move(accumulator));
-            subs->addChildSubscriptionFromThis();
-            return subs;
-        }
-        else
-        {
-            auto subs = std::make_shared<ScanSeedSubscriber>(t, std::move(accumulator), std::move(seed));
-            subs->addChildSubscriptionFromThis();
-            return subs;
-        }
+        auto subs = std::make_shared<ScanSubscriber>(t, std::move(accumulator), std::move(seed), useSeed);
+        subs->addChildSubscriptionFromThis();
+        return subs;
     }
 private:
     AccumulatorType accumulator;
-    Function0UniquePtr<R> seed;
+    T seed;
+    bool useSeed;
 };
 
 

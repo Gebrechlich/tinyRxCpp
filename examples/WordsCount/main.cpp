@@ -95,7 +95,7 @@ int main()
         return s;
     }, [](const std::string&){
         return 0;
-    }, [](const int& prev, const int&){
+    }, [](const int&, const int& prev){
         return prev + 1;
     })
     .subscribe([](const std::map<std::string, int>& str) {

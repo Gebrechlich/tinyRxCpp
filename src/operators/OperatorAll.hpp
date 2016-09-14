@@ -1,16 +1,18 @@
 #ifndef OPERATORALL_HPP
 #define OPERATORALL_HPP
 #include "Operator.hpp"
+#include <type_traits>
 
-template<typename T>
+template<typename T, typename Predicate>
 class OperatorAll : public Operator<T,bool>
 {
     using SourceSubscriberType = std::shared_ptr<Subscriber<T>>;
-    using ThisSubscriberType = typename CompositeSubscriber<T,bool>::ChildSubscriberType;
+    using ThisSubscriberType   = typename CompositeSubscriber<T,bool>::ChildSubscriberType;
+    using PredicateType        = typename std::decay<Predicate>::type;
 
     struct AllSubscriber : public CompositeSubscriber<T,bool>
     {
-        AllSubscriber(ThisSubscriberType p, Predicat<T> pred) :
+        AllSubscriber(ThisSubscriberType p, PredicateType&& pred) :
             CompositeSubscriber<T,bool>(p), predicate(std::move(pred))
         {
         }
@@ -34,12 +36,16 @@ class OperatorAll : public Operator<T,bool>
             }
         }
 
-        Predicat<T> predicate;
+        PredicateType predicate;
         bool done = false;
     };
 
 public:
-    OperatorAll(Predicat<T> pred) : Operator<T,bool>(),
+    OperatorAll(const PredicateType& pred) : Operator<T,bool>(),
+        predicate(pred)
+    {}
+
+    OperatorAll(PredicateType&& pred) : Operator<T,bool>(),
         predicate(std::move(pred))
     {}
 
@@ -50,7 +56,7 @@ public:
         return subs;
     }
 private:
-    Predicat<T> predicate;
+    PredicateType predicate;
 };
 
 #endif // OPERATORALL_HPP

@@ -1,24 +1,26 @@
 #ifndef OPERATORMAP_H
 #define OPERATORMAP_H
 #include "Operator.hpp"
+#include <type_traits>
 
-template<typename T, typename R>
-class OperatorMap : public Operator<T, R>
+template<typename T, typename Mapper>
+class OperatorMap : public Operator<T, typename std::result_of<Mapper(const T&)>::type>
 {
     using SourceSubscriberType = std::shared_ptr<Subscriber<T>>;
-    using ThisSubscriberType = typename CompositeSubscriber<T,R>::ChildSubscriberType;
-    using MapFunctionType = std::unique_ptr<Function1<R, T>>;
+    using MapResultType        = typename std::result_of<Mapper(const T&)>::type;
+    using ThisSubscriberType   = typename CompositeSubscriber<T,MapResultType>::ChildSubscriberType;
+    using MapFunctionType      = typename std::decay<Mapper>::type;
 
-    struct MapSubscriber : public CompositeSubscriber<T,R>
+    struct MapSubscriber : public CompositeSubscriber<T,MapResultType>
     {
-        MapSubscriber(ThisSubscriberType p, MapFunctionType f) :
-            CompositeSubscriber<T,R>(p), func(std::move(f))
+        MapSubscriber(ThisSubscriberType p, MapFunctionType&& f) :
+            CompositeSubscriber<T,MapResultType>(p), func(std::move(f))
         {
         }
 
         void onNext(const T& t) override
         {
-            this->child->onNext((*func)(t));
+            this->child->onNext(func(t));
         }
 
         MapFunctionType func;
@@ -26,7 +28,12 @@ class OperatorMap : public Operator<T, R>
 
 public:
     OperatorMap(){}
-    OperatorMap(MapFunctionType f) : Operator<T, R>(),
+
+    OperatorMap(const MapFunctionType& f) : Operator<T, MapResultType>(),
+        func(f)
+    {}
+
+    OperatorMap(MapFunctionType&& f) : Operator<T, MapResultType>(),
         func(std::move(f))
     {}
 

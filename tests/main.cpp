@@ -11,11 +11,9 @@ using namespace std;
 
 struct some_exception {
     explicit some_exception(int x): v(x) {
-        std::cout << " int ctor" << std::endl;
     }
 
     some_exception(const some_exception & e): v(e.v) {
-        std::cout << " copy ctor" << std::endl;
     }
 
     int v;
@@ -105,7 +103,7 @@ TEST(RxCppTest, Map)
 
     ASSERT_EQ("str100", str);
 
-    Function1UniquePtr<std::string, int> f = [&](const int& i){
+    auto f = [&](const int& i){
         std::ostringstream os;
         os << i;
         return os.str();
@@ -169,7 +167,58 @@ TEST(RxCppTest, All)
 
     values2.all([](const int& i){ return i%2 == 0;}
     ).subscribe([&](bool b){res = b;});
+
     ASSERT_FALSE(res);
+}
+
+
+TEST(RxCppTest, DoOn)
+{
+    auto values = Observable<int>::
+            create([](const Observable<int>::ThisSubscriberPtrType& t)
+    {
+        t->onNext(1);
+        t->onNext(2);
+        t->onNext(3);
+        t->onNext(4);
+        t->onComplete();
+    });
+
+    int res = 0;
+    bool complete = false;
+
+    values.doOnEach([&res](const int& i){res += i;}, [](std::exception_ptr){}
+    ,[&complete](){complete = true;}).subscribe([&](const int&){});
+
+    ASSERT_TRUE(complete);
+    ASSERT_EQ(10, res);
+
+    res = 0;
+
+    values.doOnNext([&res](const int& i){res += i;}).subscribe([&](const int&){});
+
+    ASSERT_EQ(10, res);
+
+    bool error = false;
+
+    auto errorValue = Observable<int>::
+            create([](const Observable<int>::ThisSubscriberPtrType& t)
+    {
+        t->onError(std::make_exception_ptr(some_exception(1)));
+        t->onComplete();
+    });
+
+    errorValue.doOnError([&error](std::exception_ptr ex){
+        try
+        {
+            std::rethrow_exception(ex);
+        }catch(...)
+        {
+            error = true;
+        }
+    }).subscribe([&](const int&){});
+
+    ASSERT_TRUE(error);
 }
 
 TEST(RxCppTest, Exist)
@@ -217,6 +266,7 @@ TEST(RxCppTest, Scan)
         t->onNext(3);
         t->onComplete();
     });
+
     std::vector<int> res;
     values.scan([](int i, int j){
         return i+j;}
@@ -238,11 +288,11 @@ TEST(RxCppTest, ScanWithSeed)
         t->onNext(3);
         t->onComplete();
     });
+
     std::vector<int> res;
+
     values.scan([](int i, int j){
-        return i+j;}, [](){
-        return 10;}
-    ).subscribe([&](const int& i){
+        return i+j;}, 10).subscribe([&](const int& i){
         res.push_back(i);});
 
     ASSERT_EQ(11, res[0]);
@@ -265,9 +315,9 @@ TEST(RxCppTest, Last)
     ASSERT_EQ(3, res);
 }
 
-struct ReduceFunction : public Function2<int,int,int>
+struct ReduceFunction
 {
-    int operator()(const int& t0, const int& t1) override
+    int operator()(const int& t0, const int& t1)
     {
         return t0 + t1;
     }
@@ -292,8 +342,7 @@ TEST(RxCppTest, Reduce)
 
     ASSERT_EQ(6, res);
 
-    values.reduce(std::unique_ptr<Function2<int,int,int>>(new ReduceFunction())
-                  ).subscribe([&](const int& i){
+    values.reduce(ReduceFunction()).subscribe([&](const int& i){
         res = i;});
 
     ASSERT_EQ(6, res);
@@ -335,21 +384,6 @@ TEST(RxCppTest, ToMapKSelector)
 
     int v1 = 0;
 
-    Function1UniquePtr<int, int> keySelector = [](const int& i){
-        return i * 10;
-    };
-
-    values.toMap(std::move(keySelector))
-            .subscribe([&](const std::map<int, int>& m){
-        auto it = m.find(10);
-        if(it != m.end())
-        {
-            v1 = (*it).second;
-        }
-    });
-
-    ASSERT_EQ(1, v1);
-
     values.toMap([](const int& i){
         return i * 10;
     }).subscribe([&](const std::map<int, int>& m){
@@ -374,25 +408,6 @@ TEST(RxCppTest, ToMapKVSelector)
     });
 
     size_t v1 = 0;
-
-    Function1UniquePtr<char, std::string> keySelector = [](const std::string& s){
-        return s.at(0);
-    };
-
-    Function1UniquePtr<size_t, std::string> valueSelector = [](const std::string& s){
-        return s.length();
-    };
-
-    values.toMap(std::move(keySelector), std::move(valueSelector))
-            .subscribe([&](const std::map<char, size_t>& m){
-        auto it = m.find('a');
-        if(it != m.end())
-        {
-            v1 = (*it).second;
-        }
-    });
-
-    ASSERT_EQ(5, v1);
 
     values.toMap([](const std::string& s){
         return s.at(0);
@@ -420,29 +435,6 @@ TEST(RxCppTest, ToMapKVPSelector)
 
     int v1 = 0;
 
-    Function1UniquePtr<int, int> keySelector = [](const int& i){
-        return i * 10;
-    };
-
-    Function1UniquePtr<int, int> valueSelector = [](const int& i){
-        return i;
-    };
-
-    Function2UniquePtr<int, int, int> valuePrevSelector = [](const int& prev, const int&){
-        return prev + 10;
-    };
-
-    values.toMap(std::move(keySelector), std::move(valueSelector), std::move(valuePrevSelector))
-            .subscribe([&](const std::map<int, int>& m){
-        auto it = m.find(10);
-        if(it != m.end())
-        {
-            v1 = (*it).second;
-        }
-    });
-
-    ASSERT_EQ(11, v1);
-
     values.toMap([](const int& i){
         return i * 10;
     }, [](const int& i){
@@ -462,8 +454,7 @@ TEST(RxCppTest, ToMapKVPSelector)
 
 TEST(RxCppTest, ConcatMap)
 {
-    Function1UniquePtr<Observable<int>,int> mapper
-             = [](const int& i){
+    auto mapper = [](const int& i){
         return Observable<int>::just({1*i,2*i});
     };
 
@@ -480,7 +471,6 @@ TEST(RxCppTest, ConcatMap)
     ASSERT_EQ(200, result[1]);
     ASSERT_EQ(1000, result[2]);
     ASSERT_EQ(2000, result[3]);
-
 }
 
 int main(int argc, char **argv)

@@ -1,19 +1,20 @@
 #ifndef OPERATOREXIST
 #define OPERATOREXIS
 #include "Operator.hpp"
+#include <type_traits>
 
-template<typename T>
+template<typename T, typename Predicate>
 class OperatorExist : public Operator<T,bool>
 {
     using SourceSubscriberType = std::shared_ptr<Subscriber<T>>;
-    using ThisSubscriberType = std::shared_ptr<Subscriber<bool>>;
+    using ThisSubscriberType   = std::shared_ptr<Subscriber<bool>>;
+    using PredicateType        = typename std::decay<Predicate>::type;
 
     struct ExistSubscriber : public Subscriber<T>
     {
-        ExistSubscriber(ThisSubscriberType p, Predicat<T> pred) :
+        ExistSubscriber(ThisSubscriberType p, PredicateType&& pred) :
             child(p), predicate(std::move(pred))
-        {
-        }
+        {}
 
         void onNext(const T& t) override
         {
@@ -40,12 +41,16 @@ class OperatorExist : public Operator<T,bool>
         }
 
         ThisSubscriberType child;
-        Predicat<T> predicate;
+        PredicateType predicate;
         bool done = false;
     };
 
 public:
-    OperatorExist(Predicat<T> pred) : Operator<T,bool>(),
+    OperatorExist(const PredicateType& pred) : Operator<T,bool>(),
+        predicate(pred)
+    {}
+
+    OperatorExist(PredicateType&& pred) : Operator<T,bool>(),
         predicate(std::move(pred))
     {}
 
@@ -54,7 +59,7 @@ public:
         return std::make_shared<ExistSubscriber>(t, std::move(predicate));
     }
 private:
-    Predicat<T> predicate;
+    PredicateType predicate;
 };
 
 #endif // OPERATOREXIST

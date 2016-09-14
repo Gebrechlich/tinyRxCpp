@@ -19,8 +19,8 @@ using Function1_t = std::function<R(const T&)>;
 template<typename R, typename T0, typename T1>
 using Function2_t = std::function<R(const T0&, const T1&)>;
 
-template<typename T>
-using Predicat = std::function<bool(const T&)>;
+//template<typename T>
+//using Predicat = std::function<bool(const T&)>;
 
 struct Function
 {
@@ -73,48 +73,48 @@ struct Action1 : public Function
 template<typename T>
 using Action1RefType = std::shared_ptr<Action1<T>>;
 
-template<typename R>
-struct Function0 : public Function
-{
-    using FunctionFp = Function0_t<R>;
-    FunctionFp actionFp;
+//template<typename R>
+//struct Function0 : public Function
+//{
+//    using FunctionFp = Function0_t<R>;
+//    FunctionFp actionFp;
 
-    Function0() = default;
-    Function0(Function0&&) = default;
-    Function0& operator = (Function0&&) = default;
-    Function0(FunctionFp fp) : actionFp(fp){}
-    virtual ~Function0() = default;
+//    Function0() = default;
+//    Function0(Function0&&) = default;
+//    Function0& operator = (Function0&&) = default;
+//    Function0(FunctionFp fp) : actionFp(fp){}
+//    virtual ~Function0() = default;
 
-    virtual R operator()()
-    {
-        if(actionFp)
-        {
-            return actionFp();
-        }
-        return R();
-    }
-};
+//    virtual R operator()()
+//    {
+//        if(actionFp)
+//        {
+//            return actionFp();
+//        }
+//        return R();
+//    }
+//};
 
-template<typename R>
-struct Function0UniquePtr : public std::unique_ptr<Function0<R>>
-{
-    Function0UniquePtr(Function0<R> *ptr) :
-        std::unique_ptr<Function0<R>>(ptr)
-    {}
+//template<typename R>
+//struct Function0UniquePtr : public std::unique_ptr<Function0<R>>
+//{
+//    Function0UniquePtr(Function0<R> *ptr) :
+//        std::unique_ptr<Function0<R>>(ptr)
+//    {}
 
-    Function0UniquePtr(std::unique_ptr<Function0<R>>&& o) :
-        std::unique_ptr<Function0<R>>(std::move(o))
-    {}
+//    Function0UniquePtr(std::unique_ptr<Function0<R>>&& o) :
+//        std::unique_ptr<Function0<R>>(std::move(o))
+//    {}
 
-    template<typename U, typename = typename std::enable_if<
-                 std::is_same<typename std::result_of<
-                 U()>::type , R>::value &&
-                 !std::is_same<std::nullptr_t, U>::value
-                 >::type>
-    Function0UniquePtr(U&& fp) :
-        std::unique_ptr<Function0<R>>(make_unique<Function0<R>>(std::move(fp)))
-    {}
-};
+//    template<typename U, typename = typename std::enable_if<
+//                 std::is_same<typename std::result_of<
+//                 U()>::type , R>::value &&
+//                 !std::is_same<std::nullptr_t, U>::value
+//                 >::type>
+//    Function0UniquePtr(U&& fp) :
+//        std::unique_ptr<Function0<R>>(make_unique<Function0<R>>(std::move(fp)))
+//    {}
+//};
 
 template<typename R, typename T>
 struct Function1 : public Function
@@ -139,24 +139,24 @@ struct Function1 : public Function
     }
 };
 
-template<typename R, typename T>
-struct Function1UniquePtr : public std::unique_ptr<Function1<R,T>>
-{
-    Function1UniquePtr(Function1<R,T> *ptr) :
-        std::unique_ptr<Function1<R,T>>(ptr)
-    {}
+//template<typename R, typename T>
+//struct Function1UniquePtr : public std::unique_ptr<Function1<R,T>>
+//{
+//    Function1UniquePtr(Function1<R,T> *ptr) :
+//        std::unique_ptr<Function1<R,T>>(ptr)
+//    {}
 
-    Function1UniquePtr(std::unique_ptr<Function1<R,T>>&& o) :
-        std::unique_ptr<Function1<R,T>>(std::move(o))
-    {}
+//    Function1UniquePtr(std::unique_ptr<Function1<R,T>>&& o) :
+//        std::unique_ptr<Function1<R,T>>(std::move(o))
+//    {}
 
-    template<typename U, typename = typename std::enable_if<
-                 std::is_same<typename std::result_of<U(const T&)>::type, R>::value &&
-                 !std::is_same<std::nullptr_t, U>::value>::type>
-    Function1UniquePtr(U&& fp) :
-        std::unique_ptr<Function1<R,T>>(make_unique<Function1<R,T>>(std::move(fp)))
-    {}
-};
+//    template<typename U, typename = typename std::enable_if<
+//                 std::is_same<typename std::result_of<U(const T&)>::type, R>::value &&
+//                 !std::is_same<std::nullptr_t, U>::value>::type>
+//    Function1UniquePtr(U&& fp) :
+//        std::unique_ptr<Function1<R,T>>(make_unique<Function1<R,T>>(std::move(fp)))
+//    {}
+//};
 
 
 template<typename R, typename T0, typename T1>
@@ -181,25 +181,25 @@ struct Function2 : public Function
     }
 };
 
-template<typename R, typename T0, typename T1>
-struct Function2UniquePtr : public std::unique_ptr<Function2<R,T0,T1>>
-{
-    Function2UniquePtr(Function2<R,T0,T1> *ptr) :
-        std::unique_ptr<Function2<R,T0,T1>>(ptr)
-    {}
+//template<typename R, typename T0, typename T1>
+//struct Function2UniquePtr : public std::unique_ptr<Function2<R,T0,T1>>
+//{
+//    Function2UniquePtr(Function2<R,T0,T1> *ptr) :
+//        std::unique_ptr<Function2<R,T0,T1>>(ptr)
+//    {}
 
-    Function2UniquePtr(std::unique_ptr<Function2<R,T0,T1>>&& o) :
-        std::unique_ptr<Function2<R,T0,T1>>(std::move(o))
-    {}
+//    Function2UniquePtr(std::unique_ptr<Function2<R,T0,T1>>&& o) :
+//        std::unique_ptr<Function2<R,T0,T1>>(std::move(o))
+//    {}
 
-    template<typename U, typename = typename std::enable_if<
-                       std::is_same<typename std::result_of<
-                       U(const T0&, const T1&)>::type , R>::value &&
-                       !std::is_same<std::nullptr_t, U>::value>::type>
-    Function2UniquePtr(U&& fp) :
-        std::unique_ptr<Function2<R,T0,T1>>(make_unique<Function2<R,T0,T1>>(std::move(fp)))
-    {}
-};
+//    template<typename U, typename = typename std::enable_if<
+//                       std::is_same<typename std::result_of<
+//                       U(const T0&, const T1&)>::type , R>::value &&
+//                       !std::is_same<std::nullptr_t, U>::value>::type>
+//    Function2UniquePtr(U&& fp) :
+//        std::unique_ptr<Function2<R,T0,T1>>(make_unique<Function2<R,T0,T1>>(std::move(fp)))
+//    {}
+//};
 
 
 #endif // FUNCTIONS_H

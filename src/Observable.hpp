@@ -52,7 +52,7 @@ protected:
     std::unique_ptr<Operator<B, A>> op;
 };
 
-template<typename T>
+template<typename T, typename ObservableFactory>
 class DeferOnSubscribe;
 
 template<typename T>
@@ -70,7 +70,7 @@ public:
     using OnSubscribe = OnSubscribeBase<T>;
     using ThisOnSubscribePtrType = std::shared_ptr<OnSubscribe>;
 
-    template<typename U, typename R>
+    template<typename U, typename R, typename Mapper>
     friend class OnSubscribeConcatMap;
 
     Observable() = default;
@@ -134,7 +134,8 @@ public:
         });
     }
 
-    static Observable<T> defer(Function0UniquePtr<Observable<T>>&& observableFactory);
+    template<typename ObservableFactory>
+    static Observable<T> defer(ObservableFactory&& observableFactory);
 
     WeekSubscription subscribe(typename ThisSubscriberType::ThisOnNextFP next)
     {
@@ -191,26 +192,23 @@ public:
         return Observable<P>(sp);
     }
 
-    Observable<T> filter(Predicat<T>&& pred)
+    template<typename Predicate>
+    Observable<T> filter(Predicate&& pred)
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorFilter<T>>(std::move(pred))));
+        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value, "Predicate(T&) must return a bool value");
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorFilter<T, Predicate>>
+                                                   (std::forward<Predicate>(pred))));
+    }
+
+    template<typename KeyGen>
+    Observable<T> distinct(KeyGen&& keyGenerator)
+    {
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDistinct<T,KeyGen>>(std::forward<KeyGen>(keyGenerator))));
     }
 
     Observable<T> distinct()
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDistinct<T,T>>(asIs<T>)));
-    }
-
-    template<typename R>
-    Observable<T> distinct(Function1_t<R, T>&& keyGenerator)
-    {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDistinct<T,R>>(std::move(keyGenerator))));
-    }
-
-    template<typename R>
-    Observable<T> distinct(R&& fun)
-    {
-        return distinct<typename std::result_of<R(const T&)>::type>(std::move(fun));
+        return distinct(asIs<T>);
     }
 
     Observable<T> take(size_t index)
@@ -218,96 +216,92 @@ public:
         return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorTake<T>>(index)));
     }
 
-    Observable<T> doOnNext(Action1RefType<T> onNext)
+    template<typename OnNext, typename OnError, typename OnComplete>
+    Observable<T> doOnEach(OnNext&& onNext, OnError&& onError, OnComplete&& onComplete)
     {
-        ActionRefType onComplete = std::make_shared<Action0>();
-        Action1RefType<std::exception_ptr> onError = std::make_shared<Action1<std::exception_ptr>>();
-
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDoOnEach<T>>(onNext,onError,onComplete)));
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorDoOnEach<T, OnNext, OnError, OnComplete>>
+                                                   (std::forward<OnNext>(onNext),
+                                                    std::forward<OnError>(onError),
+                                                    std::forward<OnComplete>(onComplete))));
     }
 
-    template<typename R>
-    Observable<R> map(Function1UniquePtr<R, T>&& fun)
+    template<typename OnNext>
+    Observable<T> doOnNext(OnNext&& onNext)
     {
-        return lift(std::unique_ptr<Operator<T, R>>(make_unique<OperatorMap<T, R>>(std::move(fun))));
+        return doOnEach(std::forward<OnNext>(onNext), [](std::exception_ptr){}, [](){});
     }
 
-
-    template<typename R>
-    Observable<typename std::result_of<R(const T&)>::type> map(R&& fun)
+    template<typename OnError>
+    Observable<T> doOnError(OnError&& onError)
     {
-        return map<typename std::result_of<R(const T&)>::type>(std::move(fun));
+        return doOnEach([](const T&){}, std::forward<OnError>(onError), [](){});
     }
 
-
-    template<typename K, typename V>
-    Observable<std::map<K,V>> toMap(Function1UniquePtr<K, T>&& keySelector,
-                                    Function1UniquePtr<V, T>&& valueSelector)
+    template<typename OnComplete>
+    Observable<T> doOnCompleted(OnComplete&& onComplete)
     {
-        return lift(std::unique_ptr<Operator<T,
-                    std::map<K,V>>>(make_unique<OperatorToMap<T, K, V>>(std::move(keySelector),
-                    std::move(valueSelector))));
+        return doOnEach([](const T&){}, [](std::exception_ptr){}, std::forward<OnComplete>(onComplete));
     }
 
-    template<typename Ks, typename Vs>
-    Observable<std::map<typename std::result_of<Ks(const T&)>::type,
-    typename std::result_of<Vs(const T&)>::type>> toMap(Ks&& keySelector, Vs&& valueSelector)
+    template<typename Mapper>
+    Observable<typename std::result_of<Mapper(const T&)>::type> map(Mapper&& fun)
     {
-        return toMap<typename std::result_of<Ks(const T&)>::type, typename std::result_of<Vs(const T&)>::type>
-                                                           (std::move(keySelector), std::move(valueSelector));
+        return lift(std::unique_ptr<Operator<T, typename std::result_of<Mapper(const T&)>::type>>
+                    (make_unique<OperatorMap<T, Mapper>>(std::forward<Mapper>(fun))));
     }
 
-    template<typename K>
-    Observable<std::map<K,T>> toMap(Function1UniquePtr<K, T>&& keySelector)
+    template<typename KeySelector, typename ValueSelector, typename ValuePrevSelector>
+    Observable<MapT<T,KeySelector,ValueSelector>>
+    toMap(KeySelector&& keySelector, ValueSelector&& valueSelector, ValuePrevSelector&& vpSelector)
     {
-         return lift(std::unique_ptr<Operator<T,
-                     std::map<K,T>>>(make_unique<OperatorToMap<T, K, T>>(std::move(keySelector),
-                                     Function1UniquePtr<T,T>([](const T& t){return t;}))));
+        return lift(std::unique_ptr<Operator<T,MapT<T,KeySelector,ValueSelector>>>(
+                   make_unique<OperatorToMap<T, KeySelector, ValueSelector, ValuePrevSelector>>(
+                                                          std::forward<KeySelector>(keySelector),
+                                                          std::forward<ValueSelector>(valueSelector),
+                                                          std::forward<ValuePrevSelector>(vpSelector))));
     }
 
-    template<typename Ks>
-    Observable<std::map<typename std::result_of<Ks(const T&)>::type, T>> toMap(Ks&& keySelector)
+    template<typename KeySelector, typename ValueSelector>
+    Observable<MapT<T,KeySelector,ValueSelector>> toMap(KeySelector&& keySelector, ValueSelector&& valueSelector)
     {
-         return toMap<typename std::result_of<Ks(const T&)>::type>(std::move(keySelector));
+        return toMap(std::forward<KeySelector>(keySelector), std::forward<ValueSelector>(valueSelector),
+                                    [](const typename std::result_of<ValueSelector(const T&)>::type& t,
+                                    typename std::result_of<ValueSelector(const T&)>::type){return t;});
     }
 
-    template<typename K, typename V>
-    Observable<std::map<K,V>> toMap(Function1UniquePtr<K, T>&& keySelector,
-                                    Function1UniquePtr<V, T>&& valueSelector,
-                                    Function2UniquePtr<V, V, V>&& valuePrevSelector)
+    template<typename KeySelector>
+    Observable<std::map<typename std::result_of<KeySelector(const T&)>::type, T>> toMap(KeySelector&& keySelector)
     {
-        return lift(std::unique_ptr<Operator<T,
-                    std::map<K,V>>>(make_unique<OperatorToMap<T, K, V>>(std::move(keySelector),
-                    std::move(valueSelector), std::move(valuePrevSelector))));
+        return toMap(std::forward<KeySelector>(keySelector),
+                     [](const T& t){return t;}, [](const T& t,const T&){return t;});
     }
 
-    template<typename Ks, typename Vs, typename Vps>
-    Observable<std::map<typename std::result_of<Ks(const T&)>::type,
-    typename std::result_of<Vs(const T&)>::type>> toMap(Ks&& keySelector, Vs&& valueSelector, Vps&& vpSelector)
+    template<typename Predicate>
+    Observable<bool> all(Predicate&& pred)
     {
-        return toMap<typename std::result_of<Ks(const T&)>::type, typename std::result_of<Vs(const T&)>::type>
-                                               (std::move(keySelector), std::move(valueSelector), std::move(vpSelector));
+        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value, "Predicate(T&) must return a bool value");
+        return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorAll<T, Predicate>>(std::forward<Predicate>(pred))));
     }
 
-    Observable<bool> all(Predicat<T>&& pred)
+    template<typename Predicate>
+    Observable<bool> exist(Predicate&& pred)
     {
-        return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorAll<T>>(std::move(pred))));
+        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value, "Predicate(T&) must return a bool value");
+        return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorExist<T, Predicate>>(std::forward<Predicate>(pred))));
     }
 
-    Observable<bool> exist(Predicat<T>&& pred)
+    template<typename Accumulator>
+    Observable<typename std::result_of<Accumulator(const T&, const T&)>::type> scan(Accumulator&& accumulator)
     {
-        return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorExist<T>>(std::move(pred))));
+        return lift(std::unique_ptr<Operator<T,typename std::result_of<Accumulator(const T&, const T&)>::type>>(
+                        make_unique<OperatorScan<T, Accumulator>>(std::forward<Accumulator>(accumulator))));
     }
 
-    Observable<T> scan(Function2UniquePtr<T,T,T>&& accumulator)
+    template<typename Accumulator>
+    Observable<typename std::result_of<Accumulator(const T&, const T&)>::type> scan(Accumulator&& accumulator, const T& seed)
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorScan<T, T>>(std::move(accumulator))));
-    }
-
-    Observable<T> scan(Function2UniquePtr<T,T,T>&& accumulator, Function0UniquePtr<T>&& seed)
-    {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorScan<T, T>>(std::move(accumulator),
-                                                                           std::move(seed))));
+        return lift(std::unique_ptr<Operator<T,typename std::result_of<Accumulator(const T&, const T&)>::type>>(
+                        make_unique<OperatorScan<T, Accumulator>>(std::forward<Accumulator>(accumulator), seed, true)));
     }
 
     Observable<T> last()
@@ -315,19 +309,14 @@ public:
         return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorLast<T>>()));
     }
 
-    Observable<T> reduce(Function2UniquePtr<T,T,T>&& accumulator)
+    template<typename Accumulator>
+    Observable<T> reduce(Accumulator&& accumulator)
     {
-        return scan(std::move(accumulator)).last();
+        return scan(std::forward<Accumulator>(accumulator)).last();
     }
 
-    template<typename R>
-    Observable<R> concatMap(Function1UniquePtr<Observable<R>,T>&& mapper);
-
-    template<typename R>
-    typename std::result_of<R(const T&)>::type concatMap(R&& fun)
-    {
-        return concatMap<T>(std::move(fun));
-    }
+    template<typename Mapper>
+    typename std::result_of<Mapper(const T&)>::type concatMap(Mapper&& mapper);
 
 protected:
     template<typename B>
@@ -353,29 +342,34 @@ private:
     }
 };
 
-template<typename T>
+template<typename T, typename ObservableFactory>
 class DeferOnSubscribe : public OnSubscribeBase<T>
 {
 public:
-    DeferOnSubscribe(Function0UniquePtr<Observable<T>>&& observFactory) :
+    DeferOnSubscribe(const ObservableFactory& observFactory) :
+        observableFactory(observFactory)
+    {}
+
+    DeferOnSubscribe(ObservableFactory&& observFactory) :
         observableFactory(std::move(observFactory))
-    {
-    }
+    {}
 
     void operator()(const SubscriberPtrType<T>& t) override
     {
-        auto o = (*observableFactory)();
+        auto o = observableFactory();
         o.subscribe(std::move(const_cast<SubscriberPtrType<T>&>(t)));
     }
 private:
-    Function0UniquePtr<Observable<T>> observableFactory;
+    ObservableFactory observableFactory;
 };
 
 template<typename T>
-Observable<T> Observable<T>::defer(Function0UniquePtr<Observable<T> >&& observableFactory)
+template<typename ObservableFactory>
+Observable<T> Observable<T>::defer(ObservableFactory &&observableFactory)
 {
     return create(std::shared_ptr<Observable<T>::OnSubscribe>(
-                       std::make_shared<DeferOnSubscribe<T>>(std::move(observableFactory))));
+                       std::make_shared<DeferOnSubscribe<T, ObservableFactory>>(
+                       std::forward<ObservableFactory>(observableFactory))));
 }
 
 template<typename T>
@@ -423,19 +417,19 @@ Observable<T> Observable<T>::subscribeOn(Scheduler::SchedulerRefType&& scheduler
                       std::make_shared<OperatorSubscribeOn<T>>(this->onSubscribe, std::move(scheduler))));
 }
 
-template<typename T, typename R>
+template<typename T, typename R, typename Mapper>
 class OnSubscribeConcatMap : public OnSubscribeBase<T>
 {
 public:
-    using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
-    using MapperType = std::unique_ptr<Function1<Observable<R>,T>>;   //TODO replace with shared ptr
+    using OnSubscribePtrType      = std::shared_ptr<OnSubscribeBase<T>>;
+    using MapperType              = typename std::decay<Mapper>::type;
     using ThisChildSubscriberType = typename CompositeSubscriber<T,R>::ChildSubscriberType;
 
     struct InnerConcatMapSubscriber;
 
     struct ConcatMapSubscriber : public CompositeSubscriber<T,R>
     {
-        ConcatMapSubscriber(ThisChildSubscriberType child, MapperType mapper) :
+        ConcatMapSubscriber(ThisChildSubscriberType child, MapperType&& mapper) :
             CompositeSubscriber<T,R>(child), mapper(std::move(mapper)), requested(0)
         {}
 
@@ -444,7 +438,7 @@ public:
             ++requested;
             if(!this->isUnsubscribe())
             {
-                auto obs = (*mapper)(t);
+                auto obs = mapper(t);
                 std::shared_ptr<Subscriber<T>> innerSubscriber = std::make_shared<InnerConcatMapSubscriber>
                         (std::dynamic_pointer_cast<ConcatMapSubscriber>(this->shared_from_this()));
 
@@ -512,10 +506,13 @@ public:
         std::shared_ptr<ConcatMapSubscriber> child;
     };
 
-    OnSubscribeConcatMap(OnSubscribePtrType source, MapperType mapper) : source(source)
+    OnSubscribeConcatMap(OnSubscribePtrType source, const MapperType& mapper) : source(source)
+      ,mapper(mapper)
+    {}
+
+    OnSubscribeConcatMap(OnSubscribePtrType source, MapperType&& mapper) : source(source)
       ,mapper(std::move(mapper))
-    {
-    }
+    {}
 
     void operator()(const SubscriberPtrType<R>& s) override
     {
@@ -523,8 +520,10 @@ public:
         {
             return;
         }
+
         std::shared_ptr<ConcatMapSubscriber> parent = std::make_shared<ConcatMapSubscriber>(s, std::move(mapper));
         s->add(SharedSubscription(parent));
+
         if(!s->isUnsubscribe())
         {
             (*source)(parent);
@@ -537,11 +536,12 @@ private:
 };
 
 template<typename T>
-template<typename R>
-Observable<R> Observable<T>::concatMap(Function1UniquePtr<Observable<R>,T>&& mapper)
+template<typename Mapper>
+typename std::result_of<Mapper(const T&)>::type Observable<T>::concatMap(Mapper&& mapper)
 {
-    return create(std::make_shared<OnSubscribeConcatMap<T,R>>(this->onSubscribe, std::move(mapper)));
+    typedef decltype(observableTypeTraits(mapper(T()))) R;
+    return create(std::make_shared<OnSubscribeConcatMap<T, R ,Mapper>>(
+                      this->onSubscribe, std::forward<Mapper>(mapper)));
 }
-
 
 #endif // OBSERVABLE_H

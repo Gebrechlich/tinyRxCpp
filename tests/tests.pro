@@ -30,7 +30,6 @@ HEADERS += \
     ../src/Scheduler.hpp \
     ../src/schedulers/NewThreadScheduler.hpp \
     ../src/SchedulersFactory.hpp \
-    ../src/FunctionsPtr.hpp \
     ../src/SubscriptionsList.hpp \
     ../src/utils/Util.hpp \
     ../src/operators/OperatorTake.hpp \
@@ -38,4 +37,6 @@ HEADERS += \
     ../src/operators/OperatorObserveOn.hpp \
     ../src/utils/MTQueue.hpp \
     ../src/utils/ThreadPoolExecutor.hpp \
-    ../src/operators/OperatorToMap.hpp
+    ../src/operators/OperatorToMap.hpp \
+    ../src/operators/OperatorDoOnEach.hpp \
+    ../src/operators/OperatorExist.hpp
