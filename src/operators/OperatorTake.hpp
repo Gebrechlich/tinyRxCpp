@@ -28,7 +28,8 @@ class OperatorTake : public Operator<T,T>
 
             if(complete)
             {
-                this->onComplete();
+                this->child->onComplete();
+                this->unsubscribe();
             }
         }
 

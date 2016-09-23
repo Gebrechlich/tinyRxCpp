@@ -8,43 +8,10 @@
 #include <vector>
 #include <atomic>
 
-template<typename T>
-class ScheduledAction : public SubscriptionBase
-{
-public:
-    ScheduledAction(T&& act) : action(std::move(act)), unsubscr(false)
-    {}
-
-    void operator()()
-    {
-        if(!unsubscr.load())
-        {
-            action();
-        }
-    }
-
-    bool isUnsubscribe()
-    {
-        return unsubscr.load();
-    }
-
-    void unsubscribe()
-    {
-        unsubscr.store(true);
-    }
-private:
-    T action;
-    std::atomic<bool> unsubscr;
-};
-
-template<typename T>
-using ScheduledActionPrtType = std::shared_ptr<ScheduledAction<T>>;
-
-template<typename T>
 class ThreadPoolExecutor
 {
 public:
-    using ScheduledActionType = ScheduledActionPrtType<T>;
+    using ScheduledActionType = ActionRefType;
 
     ThreadPoolExecutor(size_t size) : done(false)
     {
@@ -64,6 +31,7 @@ public:
     {
         done.store(true);
         submitLock.lock();
+
         for(size_t i = 0; i < workers.size(); ++i)
         {
             if(workers[i].joinable())
@@ -71,23 +39,24 @@ public:
                 workers[i].join();
             }
         }
+
         submitLock.unlock();
     }
 
-    ScheduledActionType submit(T&& action)
+    void submit(ScheduledActionType action)
     {
         submitLock.lock();
-        auto schedAction = std::make_shared<ScheduledAction<T>>(std::move(action));
-        actions.push(schedAction);
+        actions.push(action);
         submitLock.unlock();
-        return schedAction;
     }
 
     void shutdown()
     {
         done.store(true);
     }
+
 private:
+
     virtual void run()
     {
         while(true)

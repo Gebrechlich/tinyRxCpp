@@ -14,7 +14,7 @@
 #include "OperatorToMap.hpp"
 #include "OperatorDoOnEach.hpp"
 #include "Functions.hpp"
-#include "Scheduler.hpp"
+#include "SchedulersFactory.hpp"
 #include "Util.hpp"
 #include <memory>
 #include <initializer_list>
@@ -60,6 +60,9 @@ class OperatorSubscribeOn;
 
 template<typename T>
 class OperatorObserveOn;
+
+template<typename T>
+class RangeOnSubscribe;
 
 template<typename T>
 class Observable
@@ -133,6 +136,17 @@ public:
             subscriber->onComplete();
         });
     }
+
+    static Observable<T> range(T start, T count)
+    {
+        static_assert(std::is_integral<T>::value, "Integral type is required.");
+        return create(std::make_shared<RangeOnSubscribe<T>>(start, count));
+    }
+
+    template<typename Rep, typename Period>
+    static Observable<T> interval(const std::chrono::duration<Rep, Period>&  delay ,
+                                  const std::chrono::duration<Rep, Period>&  period);
+
 
     template<typename ObservableFactory>
     static Observable<T> defer(ObservableFactory&& observableFactory);
@@ -342,6 +356,27 @@ private:
     }
 };
 
+template<typename T>
+class RangeOnSubscribe : public OnSubscribeBase<T>
+{
+public:
+    RangeOnSubscribe(T start, T count) : start(start), count(count)
+    {}
+
+    void operator()(const SubscriberPtrType<T>& t) override
+    {
+        for(T i = start; i < count && !t->isUnsubscribe(); ++i)
+        {
+            t->onNext(i);
+        }
+        t->onComplete();
+    }
+
+private:
+    T start;
+    T count;
+};
+
 template<typename T, typename ObservableFactory>
 class DeferOnSubscribe : public OnSubscribeBase<T>
 {
@@ -357,7 +392,7 @@ public:
     void operator()(const SubscriberPtrType<T>& t) override
     {
         auto o = observableFactory();
-        o.subscribe(std::move(const_cast<SubscriberPtrType<T>&>(t)));
+        o.subscribe(t);
     }
 private:
     ObservableFactory observableFactory;
@@ -370,6 +405,51 @@ Observable<T> Observable<T>::defer(ObservableFactory &&observableFactory)
     return create(std::shared_ptr<Observable<T>::OnSubscribe>(
                        std::make_shared<DeferOnSubscribe<T, ObservableFactory>>(
                        std::forward<ObservableFactory>(observableFactory))));
+}
+
+template<typename T, typename Rep, typename Period>
+class OperatorSubscribePeriodically : public OnSubscribeBase<T>
+{
+public:
+    using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
+    using ThisSubscriberType = typename CompositeSubscriber<T,T>::ChildSubscriberType;
+
+    OperatorSubscribePeriodically(Scheduler::SchedulerRefType&& s,
+                                  const std::chrono::duration<Rep, Period>&  delay,
+                                  const std::chrono::duration<Rep, Period>&  period) :
+        scheduler(std::move(s)), delay(delay), period(period)
+    {}
+
+    void operator()(const ThisSubscriberType& s) override
+    {
+        subscriber = s;
+        worker = std::move(scheduler->createWorker());
+        auto subscription = worker->getSubscription();
+        s->add(subscription);
+        auto ssubscription = worker->schedulePeriodically(std::make_shared<Action0>([this](){
+            static int count = 0;
+            this->subscriber->onNext(count);
+            ++count;
+        }),delay, period);
+        s->add(ssubscription);
+    }
+
+private:
+    Scheduler::SchedulerRefType scheduler;
+    Scheduler::WorkerRefType worker;
+    const std::chrono::duration<Rep, Period> delay;
+    const std::chrono::duration<Rep, Period> period;
+    ThisSubscriberType subscriber;
+};
+
+template<typename T>
+template<typename Rep, typename Period>
+Observable<T> Observable<T>::interval(const std::chrono::duration<Rep, Period>&  delay ,
+                              const std::chrono::duration<Rep, Period>&  period)
+{
+    return create(std::shared_ptr<Observable<T>::OnSubscribe>(
+                       std::make_shared<OperatorSubscribePeriodically<T, Rep, Period>>(
+                       SchedulersFactory::instance().newThread(), delay, period)));
 }
 
 template<typename T>

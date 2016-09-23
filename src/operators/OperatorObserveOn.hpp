@@ -109,9 +109,10 @@ class OperatorObserveOn : public Operator<T,T>
         {
             worker = std::move(scheduler->createWorker());
             auto subscription = worker->getSubscription();
-            this->child->add(subscription);
+            this->add(subscription);
+            auto ssubscription = worker->schedule(std::make_shared<ThreadAction>(this->child, queue, *this, state));
+            this->add(ssubscription);
             this->addChildSubscriptionFromThis();
-            worker->schedule(std::make_shared<ThreadAction>(this->child, queue, *this, state));
         }
 
         Scheduler::SchedulerRefType scheduler;

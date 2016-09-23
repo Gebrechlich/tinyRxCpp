@@ -20,7 +20,6 @@ protected:
     class NewThreadWorker : public Scheduler::Worker
     {
         struct NewThreadSubscription;
-        struct ActionAdapter;
     public:
         NewThreadWorker() : executor(1), subscription(std::make_shared<NewThreadSubscription>(executor))
         {}
@@ -31,9 +30,9 @@ protected:
         NewThreadWorker(const NewThreadWorker&) = delete;
         NewThreadWorker& operator = (const NewThreadWorker&) = delete;
 
-        void schedule(ActionRefType action) override
+        void scheduleInteranal(ActionRefType action) override
         {
-             executor.submit(ActionAdapter(action));
+             executor.submit(action);
         }
 
         virtual SharedSubscription getSubscription() override
@@ -41,23 +40,10 @@ protected:
             return subscription;
         }
     private:
-        struct ActionAdapter
-        {
-            ActionAdapter(ActionRefType a) : action(a)
-            {
-            }
-            void operator()()
-            {
-                if(action)
-                {
-                    (*action)();
-                }
-            }
-            ActionRefType action;
-        };
+
         struct NewThreadSubscription : public SubscriptionBase
         {
-            NewThreadSubscription(ThreadPoolExecutor<ActionAdapter>& e) : executor(e), isUnsub(false)
+            NewThreadSubscription(ThreadPoolExecutor& e) : executor(e), isUnsub(false)
             {}
 
             bool isUnsubscribe() override
@@ -74,10 +60,11 @@ protected:
                 isUnsub.store(true);
             }
 
-            ThreadPoolExecutor<ActionAdapter>& executor;
+            ThreadPoolExecutor& executor;
             std::atomic<bool> isUnsub;
         };
-        ThreadPoolExecutor<ActionAdapter> executor;
+
+        ThreadPoolExecutor executor;
         SharedSubscription subscription;
     };
 };
