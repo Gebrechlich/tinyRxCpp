@@ -471,6 +471,38 @@ TEST(RxCppTest, ConcatMap)
     ASSERT_EQ(200, result[1]);
     ASSERT_EQ(1000, result[2]);
     ASSERT_EQ(2000, result[3]);
+
+    std::vector<std::string> sres;
+
+    values.concatMap([](const int& i){
+        std::ostringstream os;
+        os << i;
+        return Observable<std::string>::just(os.str());
+    }).subscribe([&](const std::string s){
+        sres.push_back(s);
+    });
+
+
+    ASSERT_EQ("100", sres[0]);
+    ASSERT_EQ("1000", sres[1]);
+}
+
+
+TEST(RxCppTest, Concat)
+{
+    auto o1 = Observable<int>::just(1);
+    auto o2 = Observable<int>::just(2);
+
+    std::vector<int> result;
+
+    auto concatObservable = Observable<int>::concat(o1 , o2);
+    concatObservable.subscribe([&](const int& i){
+        result.push_back(i);
+    });
+
+
+    ASSERT_EQ(1, result[0]);
+    ASSERT_EQ(2, result[1]);
 }
 
 int main(int argc, char **argv)

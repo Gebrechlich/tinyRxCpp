@@ -73,6 +73,9 @@ public:
     using OnSubscribe = OnSubscribeBase<T>;
     using ThisOnSubscribePtrType = std::shared_ptr<OnSubscribe>;
 
+    template<typename R>
+    using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<R>>;
+
     template<typename U, typename R, typename Mapper>
     friend class OnSubscribeConcatMap;
 
@@ -83,14 +86,26 @@ public:
     {
     }
 
-    static Observable<T> create(ThisOnSubscribePtrType f)
+    template<typename R>
+    static Observable<R> create(OnSubscribePtrType<R> onSub)
     {
-        return Observable(std::move(f));
+        return Observable<R>(std::move(onSub));
+    }
+
+    template<typename R>
+    static Observable<R> create(typename OnSubscribeBase<R>::ActionFp action)
+    {
+        return Observable<R>(OnSubscribePtrType<R>(std::make_shared<OnSubscribeBase<R>>(action)));
+    }
+
+    static Observable<T> create(ThisOnSubscribePtrType onSub)
+    {
+        return create<T>(std::move(onSub));
     }
 
     static Observable<T> create(typename OnSubscribe::ActionFp action)
     {
-        return Observable(ThisOnSubscribePtrType(std::make_shared<OnSubscribe>(action)));
+        return create<T>(ThisOnSubscribePtrType(std::make_shared<OnSubscribe>(action)));
     }
 
     static Observable<T> just(std::vector<T> initList)
@@ -332,6 +347,21 @@ public:
     template<typename Mapper>
     typename std::result_of<Mapper(const T&)>::type concatMap(Mapper&& mapper);
 
+    static Observable<T> concat(Observable<Observable<T>>& observable)
+    {
+        return observable.concatMap([](const Observable<T>& o){
+            return o;
+        });
+    }
+
+    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2)
+    {
+        std::vector<Observable<T>> v;
+        v.push_back(o1);
+        v.push_back(o2);
+        auto o = Observable<Observable<T>>::just(v);
+        return concat(o);
+    }
 protected:
     template<typename B>
     static WeekSubscription subscribe(SubscriberPtrType<B> subscriber,
@@ -498,7 +528,7 @@ Observable<T> Observable<T>::subscribeOn(Scheduler::SchedulerRefType&& scheduler
 }
 
 template<typename T, typename R, typename Mapper>
-class OnSubscribeConcatMap : public OnSubscribeBase<T>
+class OnSubscribeConcatMap : public OnSubscribeBase<R>
 {
 public:
     using OnSubscribePtrType      = std::shared_ptr<OnSubscribeBase<T>>;
@@ -519,7 +549,7 @@ public:
             if(!this->isUnsubscribe())
             {
                 auto obs = mapper(t);
-                std::shared_ptr<Subscriber<T>> innerSubscriber = std::make_shared<InnerConcatMapSubscriber>
+                std::shared_ptr<Subscriber<R>> innerSubscriber = std::make_shared<InnerConcatMapSubscriber>
                         (std::dynamic_pointer_cast<ConcatMapSubscriber>(this->shared_from_this()));
 
                 obs.subscribe(innerSubscriber);
@@ -527,7 +557,7 @@ public:
             }
         }
 
-        void onNextInner(const T& t)
+        void onNextInner(const R& t)
         {
             this->child->onNext(t);
         }
@@ -563,12 +593,12 @@ public:
         volatile bool done = false;
     };
 
-    struct InnerConcatMapSubscriber : public Subscriber<T>
+    struct InnerConcatMapSubscriber : public Subscriber<R>
     {
         InnerConcatMapSubscriber(std::shared_ptr<ConcatMapSubscriber> child) : child(child)
         {}
 
-        void onNext(const T& t) override
+        void onNext(const R& t) override
         {
             child->onNextInner(t);
         }
@@ -620,8 +650,8 @@ template<typename Mapper>
 typename std::result_of<Mapper(const T&)>::type Observable<T>::concatMap(Mapper&& mapper)
 {
     typedef decltype(observableTypeTraits(mapper(T()))) R;
-    return create(std::make_shared<OnSubscribeConcatMap<T, R ,Mapper>>(
-                      this->onSubscribe, std::forward<Mapper>(mapper)));
+    std::make_shared<OnSubscribeConcatMap<T, R ,Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper));
+    return create<R>(std::make_shared<OnSubscribeConcatMap<T, R ,Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper)));
 }
 
 #endif // OBSERVABLE_H
