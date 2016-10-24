@@ -1,68 +1,31 @@
 #ifndef OBSERVABLE_H
 #define OBSERVABLE_H
+
 #include "Functions.hpp"
 #include "Subscriber.hpp"
-#include "OperatorFilter.hpp"
-#include "OperatorMap.hpp"
-#include "OperatorDistinct.hpp"
-#include "OperatorAll.hpp"
-#include "OperatorExist.hpp"
-#include "OperatorScan.hpp"
-#include "OperatorLast.hpp"
-#include "OperatorTake.hpp"
-#include "OperatorObserveOn.hpp"
-#include "OperatorToMap.hpp"
-#include "OperatorDoOnEach.hpp"
-#include "Functions.hpp"
+#include "operators/OperatorFilter.hpp"
+#include "operators/OperatorMap.hpp"
+#include "operators/OperatorDistinct.hpp"
+#include "operators/OperatorAll.hpp"
+#include "operators/OperatorExist.hpp"
+#include "operators/OperatorScan.hpp"
+#include "operators/OperatorLast.hpp"
+#include "operators/OperatorTake.hpp"
+#include "operators/OperatorObserveOn.hpp"
+#include "operators/OperatorToMap.hpp"
+#include "operators/OperatorDoOnEach.hpp"
+#include "operators/LiftOnSubscribe.hpp"
+#include "operators/OperatorSubscribeOn.hpp"
+#include "operators/DeferOnSubscribe.hpp"
+#include "operators/RangeOnSubscribe.hpp"
+#include "operators/RepeatOnSubscribe.hpp"
+#include "operators/OnSubscribeConcatMap.hpp"
+#include "operators/OnSubscribePeriodically.hpp"
 #include "SchedulersFactory.hpp"
-#include "Util.hpp"
+#include "utils/Util.hpp"
 #include <memory>
 #include <initializer_list>
-
-template<typename T>
-using SubscriberPtrType = std::shared_ptr<Subscriber<T>>;
-
-template<typename R>
-class OnSubscribeBase : public Action1<SubscriberPtrType<R>>
-{
-public:
-    OnSubscribeBase() : Action1<SubscriberPtrType<R>>(){}
-
-    OnSubscribeBase(typename Action1<SubscriberPtrType<R>>::ActionFp fp) :
-        Action1<SubscriberPtrType<R>>(fp){}
-};
-
-template<typename A, typename B>
-class LiftOnSubscribe : public OnSubscribeBase<A>
-{
-public:
-    LiftOnSubscribe(std::shared_ptr<OnSubscribeBase<B>> parent, std::unique_ptr<Operator<B, A>> o) :
-                    OnSubscribeBase<A>(), parentOnSubscribe(parent), op(std::move(o))
-    {
-    }
-
-    void operator()(const SubscriberPtrType<A>& t) override
-    {
-        SubscriberPtrType<B> st = (*op)(t);
-        (*parentOnSubscribe)(std::move(st));
-    }
-
-protected:
-    std::shared_ptr<OnSubscribeBase<B>> parentOnSubscribe;
-    std::unique_ptr<Operator<B, A>> op;
-};
-
-template<typename T, typename ObservableFactory>
-class DeferOnSubscribe;
-
-template<typename T>
-class OperatorSubscribeOn;
-
-template<typename T>
-class OperatorObserveOn;
-
-template<typename T>
-class RangeOnSubscribe;
+#include <array>
 
 template<typename T>
 class Observable
@@ -75,9 +38,6 @@ public:
 
     template<typename R>
     using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<R>>;
-
-    template<typename U, typename R, typename Mapper>
-    friend class OnSubscribeConcatMap;
 
     Observable() = default;
     ~Observable() = default;
@@ -108,13 +68,16 @@ public:
         return create<T>(ThisOnSubscribePtrType(std::make_shared<OnSubscribe>(action)));
     }
 
-    static Observable<T> just(std::vector<T> initList)
+    template<typename L>
+    static Observable<T> from(const L& list)
     {
-        return Observable<T>::create([initList](const Observable<T>::
+        static_assert((std::is_array<L>::value ||
+                       is_iterable<L>::value), "Array type is required.");
+        return Observable<T>::create([list](const Observable<T>::
                                      ThisSubscriberPtrType& subscriber)
         {
-            auto value = std::begin(initList);
-            auto end = std::end(initList);
+            auto value = std::begin(list);
+            auto end = std::end(list);
             while(value != end)
             {
                 subscriber->onNext(*value);
@@ -134,22 +97,65 @@ public:
         });
     }
 
-    template<typename L, typename = typename std::enable_if<
-                 std::is_array<L>::value || is_iterable<L>::value>::type>
-    static Observable<T> from(L&& list)
+    static Observable<T> just(const T& t1, const T& t2)
     {
-        return Observable<T>::create([list](const Observable<T>::
-                                     ThisSubscriberPtrType& subscriber)
-        {
-            auto value = std::begin(list);
-            auto end = std::end(list);
-            while(value != end)
-            {
-                subscriber->onNext(*value);
-                ++value;
-            }
-            subscriber->onComplete();
-        });
+        std::array<T,2> list = {t1, t2};
+        return Observable<T>::from(list);
+    }
+
+    static Observable<T> just(const T& t1, const T& t2, const T& t3)
+    {
+        std::array<T,3> list = {t1, t2, t3};
+        return Observable<T>::from(list);
+    }
+
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4)
+    {
+        std::array<T,4> list = {t1, t2, t3, t4};
+        return Observable<T>::from(list);
+    }
+
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4, const T& t5)
+    {
+        std::array<T,5> list = {t1, t2, t3, t4, t5};
+        return Observable<T>::from(list);
+    }
+
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6)
+    {
+        std::array<T,6> list = {t1, t2, t3, t4, t5, t6};
+        return Observable<T>::from(list);
+    }
+
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6, const T& t7)
+    {
+        std::array<T,7> list = {t1, t2, t3, t4, t5, t6, t7};
+        return Observable<T>::from(list);
+    }
+
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6, const T& t7, const T& t8)
+    {
+        std::array<T,8> list = {t1, t2, t3, t4, t5, t6, t7, t8};
+        return Observable<T>::from(list);
+    }
+
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6, const T& t7, const T& t8,
+                              const T& t9)
+    {
+        std::array<T,9> list = {t1, t2, t3, t4, t5, t6, t7, t8, t9};
+        return Observable<T>::from(list);
+    }
+
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6, const T& t7, const T& t8,
+                              const T& t9, const T& t10)
+    {
+        std::array<T,10> list = {t1, t2, t3, t4, t5, t6, t7, t8, t9, t10};
+        return Observable<T>::from(list);
     }
 
     static Observable<T> range(T start, T count)
@@ -160,11 +166,20 @@ public:
 
     template<typename Rep, typename Period>
     static Observable<T> interval(const std::chrono::duration<Rep, Period>&  delay ,
-                                  const std::chrono::duration<Rep, Period>&  period);
-
+                                  const std::chrono::duration<Rep, Period>&  period)
+    {
+        return create(std::shared_ptr<Observable<T>::OnSubscribe>(
+                           std::make_shared<OnSubscribePeriodically<T, Rep, Period>>(
+                           SchedulersFactory::instance().newThread(), delay, period)));
+    }
 
     template<typename ObservableFactory>
-    static Observable<T> defer(ObservableFactory&& observableFactory);
+    static Observable<T> defer(ObservableFactory&& observableFactory)
+    {
+        return create(std::shared_ptr<Observable<T>::OnSubscribe>(
+                           std::make_shared<DeferOnSubscribe<T, ObservableFactory>>(
+                           std::forward<ObservableFactory>(observableFactory))));
+    }
 
     WeekSubscription subscribe(typename ThisSubscriberType::ThisOnNextFP next)
     {
@@ -199,7 +214,11 @@ public:
         return Observable<T>::subscribe(subscriber, this);
     }
 
-    Observable<T> subscribeOn(Scheduler::SchedulerRefType&& scheduler);
+    Observable<T> subscribeOn(Scheduler::SchedulerRefType&& scheduler)
+    {
+        return create(std::shared_ptr<Observable<T>::OnSubscribe>(
+                          std::make_shared<OperatorSubscribeOn<T>>(this->onSubscribe, std::move(scheduler))));
+    }
 
     Observable<T> observeOn(Scheduler::SchedulerRefType&& scheduler)
     {
@@ -224,7 +243,8 @@ public:
     template<typename Predicate>
     Observable<T> filter(Predicate&& pred)
     {
-        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value, "Predicate(T&) must return a bool value");
+        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value,
+                      "Predicate(T&) must return a bool value");
         return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorFilter<T, Predicate>>
                                                    (std::forward<Predicate>(pred))));
     }
@@ -308,14 +328,16 @@ public:
     template<typename Predicate>
     Observable<bool> all(Predicate&& pred)
     {
-        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value, "Predicate(T&) must return a bool value");
+        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value,
+                      "Predicate(T&) must return a bool value");
         return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorAll<T, Predicate>>(std::forward<Predicate>(pred))));
     }
 
     template<typename Predicate>
     Observable<bool> exist(Predicate&& pred)
     {
-        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value, "Predicate(T&) must return a bool value");
+        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value,
+                      "Predicate(T&) must return a bool value");
         return lift(std::unique_ptr<Operator<T, bool>>(make_unique<OperatorExist<T, Predicate>>(std::forward<Predicate>(pred))));
     }
 
@@ -345,7 +367,11 @@ public:
     }
 
     template<typename Mapper>
-    typename std::result_of<Mapper(const T&)>::type concatMap(Mapper&& mapper);
+    typename std::result_of<Mapper(const T&)>::type concatMap(Mapper&& mapper)
+    {
+        typedef decltype(observableTypeTraits(mapper(T()))) R;
+        return create<R>(std::make_shared<OnSubscribeConcatMap<T, R ,Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper)));
+    }
 
     static Observable<T> concat(Observable<Observable<T>>& observable)
     {
@@ -356,12 +382,48 @@ public:
 
     static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2)
     {
-        std::vector<Observable<T>> v;
-        v.push_back(o1);
-        v.push_back(o2);
-        auto o = Observable<Observable<T>>::just(v);
+        auto o = std::move(Observable<Observable<T>>::just(o1, o2));
         return concat(o);
     }
+
+    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3)
+    {
+         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3));
+         return concat(o);
+    }
+
+    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3, const Observable<T>& o4)
+    {
+         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3, o4));
+         return concat(o);
+    }
+
+    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3, const Observable<T>& o4,
+                                const Observable<T>& o5)
+    {
+         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3, o4, o5));
+         return concat(o);
+    }
+
+    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3, const Observable<T>& o4,
+                                const Observable<T>& o5, const Observable<T>& o6)
+    {
+         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3, o4, o5, o6));
+         return concat(o);
+    }
+
+    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3, const Observable<T>& o4,
+                                const Observable<T>& o5, const Observable<T>& o6, const Observable<T>& o7)
+    {
+         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3, o4, o5, o6, o7));
+         return concat(o);
+    }
+
+    Observable<T> repeat(size_t count = 0)
+    {
+        return create<T>(std::make_shared<RepeatOnSubscribe<T>>(this->onSubscribe, count));
+    }
+
 protected:
     template<typename B>
     static WeekSubscription subscribe(SubscriberPtrType<B> subscriber,
@@ -376,7 +438,6 @@ protected:
 
 private:
     ThisOnSubscribePtrType onSubscribe;
-
     ThisSubscriberPtrType createSubscriber(
             typename ThisSubscriberType::ThisOnNextFP next,
             typename ThisSubscriberType::ThisOnErrorFP error,
@@ -385,273 +446,5 @@ private:
         return ThisSubscriberPtrType(std::make_shared<ThisSubscriberType>(next, error, complete));
     }
 };
-
-template<typename T>
-class RangeOnSubscribe : public OnSubscribeBase<T>
-{
-public:
-    RangeOnSubscribe(T start, T count) : start(start), count(count)
-    {}
-
-    void operator()(const SubscriberPtrType<T>& t) override
-    {
-        for(T i = start; i < count && !t->isUnsubscribe(); ++i)
-        {
-            t->onNext(i);
-        }
-        t->onComplete();
-    }
-
-private:
-    T start;
-    T count;
-};
-
-template<typename T, typename ObservableFactory>
-class DeferOnSubscribe : public OnSubscribeBase<T>
-{
-public:
-    DeferOnSubscribe(const ObservableFactory& observFactory) :
-        observableFactory(observFactory)
-    {}
-
-    DeferOnSubscribe(ObservableFactory&& observFactory) :
-        observableFactory(std::move(observFactory))
-    {}
-
-    void operator()(const SubscriberPtrType<T>& t) override
-    {
-        auto o = observableFactory();
-        o.subscribe(t);
-    }
-private:
-    ObservableFactory observableFactory;
-};
-
-template<typename T>
-template<typename ObservableFactory>
-Observable<T> Observable<T>::defer(ObservableFactory &&observableFactory)
-{
-    return create(std::shared_ptr<Observable<T>::OnSubscribe>(
-                       std::make_shared<DeferOnSubscribe<T, ObservableFactory>>(
-                       std::forward<ObservableFactory>(observableFactory))));
-}
-
-template<typename T, typename Rep, typename Period>
-class OperatorSubscribePeriodically : public OnSubscribeBase<T>
-{
-public:
-    using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
-    using ThisSubscriberType = typename CompositeSubscriber<T,T>::ChildSubscriberType;
-
-    OperatorSubscribePeriodically(Scheduler::SchedulerRefType&& s,
-                                  const std::chrono::duration<Rep, Period>&  delay,
-                                  const std::chrono::duration<Rep, Period>&  period) :
-        scheduler(std::move(s)), delay(delay), period(period)
-    {}
-
-    void operator()(const ThisSubscriberType& s) override
-    {
-        subscriber = s;
-        worker = std::move(scheduler->createWorker());
-        auto subscription = worker->getSubscription();
-        s->add(subscription);
-        auto ssubscription = worker->schedulePeriodically(std::make_shared<Action0>([this](){
-            static int count = 0;
-            this->subscriber->onNext(count);
-            ++count;
-        }),delay, period);
-        s->add(ssubscription);
-    }
-
-private:
-    Scheduler::SchedulerRefType scheduler;
-    Scheduler::WorkerRefType worker;
-    const std::chrono::duration<Rep, Period> delay;
-    const std::chrono::duration<Rep, Period> period;
-    ThisSubscriberType subscriber;
-};
-
-template<typename T>
-template<typename Rep, typename Period>
-Observable<T> Observable<T>::interval(const std::chrono::duration<Rep, Period>&  delay ,
-                              const std::chrono::duration<Rep, Period>&  period)
-{
-    return create(std::shared_ptr<Observable<T>::OnSubscribe>(
-                       std::make_shared<OperatorSubscribePeriodically<T, Rep, Period>>(
-                       SchedulersFactory::instance().newThread(), delay, period)));
-}
-
-template<typename T>
-class OperatorSubscribeOn : public OnSubscribeBase<T>
-{
-public:
-    using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
-
-    OperatorSubscribeOn(OnSubscribePtrType source, Scheduler::SchedulerRefType&& s) :
-        source(source), scheduler(std::move(s))
-    {}
-
-    class ThreadAction : public Action0
-    {
-    public:
-        ThreadAction(OnSubscribePtrType source, const SubscriberPtrType<T>& subscriber)
-            : source(source), subscriber(subscriber)
-        {}
-        void operator()() override
-        {
-            (*source)(subscriber);
-        }
-    private:
-        OnSubscribePtrType source;
-        SubscriberPtrType<T> subscriber;
-    };
-
-    void operator()(const SubscriberPtrType<T>& subscriber) override
-    {
-        worker = std::move(scheduler->createWorker());
-        auto subscription = worker->getSubscription();
-        subscriber->add(subscription);
-        worker->schedule(std::unique_ptr<Action0>(make_unique<ThreadAction>(source, subscriber)));;
-    }
-private:
-    OnSubscribePtrType source;
-    Scheduler::SchedulerRefType scheduler;
-    Scheduler::WorkerRefType worker;
-};
-
-template<typename T>
-Observable<T> Observable<T>::subscribeOn(Scheduler::SchedulerRefType&& scheduler)
-{
-    return create(std::shared_ptr<Observable<T>::OnSubscribe>(
-                      std::make_shared<OperatorSubscribeOn<T>>(this->onSubscribe, std::move(scheduler))));
-}
-
-template<typename T, typename R, typename Mapper>
-class OnSubscribeConcatMap : public OnSubscribeBase<R>
-{
-public:
-    using OnSubscribePtrType      = std::shared_ptr<OnSubscribeBase<T>>;
-    using MapperType              = typename std::decay<Mapper>::type;
-    using ThisChildSubscriberType = typename CompositeSubscriber<T,R>::ChildSubscriberType;
-
-    struct InnerConcatMapSubscriber;
-
-    struct ConcatMapSubscriber : public CompositeSubscriber<T,R>
-    {
-        ConcatMapSubscriber(ThisChildSubscriberType child, MapperType&& mapper) :
-            CompositeSubscriber<T,R>(child), mapper(std::move(mapper)), requested(0)
-        {}
-
-        void onNext(const T& t) override
-        {
-            ++requested;
-            if(!this->isUnsubscribe())
-            {
-                auto obs = mapper(t);
-                std::shared_ptr<Subscriber<R>> innerSubscriber = std::make_shared<InnerConcatMapSubscriber>
-                        (std::dynamic_pointer_cast<ConcatMapSubscriber>(this->shared_from_this()));
-
-                obs.subscribe(innerSubscriber);
-                this->add(SharedSubscription(innerSubscriber));
-            }
-        }
-
-        void onNextInner(const R& t)
-        {
-            this->child->onNext(t);
-        }
-
-        void onErrorInner(std::exception_ptr ex)
-        {
-            this->child->onError(ex);
-        }
-
-        void onCompleteInner()
-        {
-            --requested;
-            if(parentComplete && !done && requested.load() == 0)
-            {
-                done = true;
-                this->child->onComplete();
-            }
-        }
-
-        void onComplete() override
-        {
-            parentComplete = true;
-            if(requested.load() == 0 && !done)
-            {
-                done = true;
-                this->child->onComplete();
-            }
-        }
-
-        MapperType mapper;
-        std::atomic_int requested;
-        volatile bool parentComplete = false;
-        volatile bool done = false;
-    };
-
-    struct InnerConcatMapSubscriber : public Subscriber<R>
-    {
-        InnerConcatMapSubscriber(std::shared_ptr<ConcatMapSubscriber> child) : child(child)
-        {}
-
-        void onNext(const R& t) override
-        {
-            child->onNextInner(t);
-        }
-
-        void onError(std::exception_ptr ex) override
-        {
-            child->onErrorInner(ex);
-        }
-
-        void onComplete() override
-        {
-            child->onCompleteInner();
-        }
-
-        std::shared_ptr<ConcatMapSubscriber> child;
-    };
-
-    OnSubscribeConcatMap(OnSubscribePtrType source, const MapperType& mapper) : source(source)
-      ,mapper(mapper)
-    {}
-
-    OnSubscribeConcatMap(OnSubscribePtrType source, MapperType&& mapper) : source(source)
-      ,mapper(std::move(mapper))
-    {}
-
-    void operator()(const SubscriberPtrType<R>& s) override
-    {
-        if(s == nullptr)
-        {
-            return;
-        }
-
-        std::shared_ptr<ConcatMapSubscriber> parent = std::make_shared<ConcatMapSubscriber>(s, std::move(mapper));
-        s->add(SharedSubscription(parent));
-
-        if(!s->isUnsubscribe())
-        {
-            (*source)(parent);
-        }
-    }
-
-private:
-    OnSubscribePtrType source;
-    MapperType mapper;
-};
-
-template<typename T>
-template<typename Mapper>
-typename std::result_of<Mapper(const T&)>::type Observable<T>::concatMap(Mapper&& mapper)
-{
-    typedef decltype(observableTypeTraits(mapper(T()))) R;
-    std::make_shared<OnSubscribeConcatMap<T, R ,Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper));
-    return create<R>(std::make_shared<OnSubscribeConcatMap<T, R ,Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper)));
-}
 
 #endif // OBSERVABLE_H

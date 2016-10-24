@@ -39,4 +39,13 @@ HEADERS += \
     ../src/utils/ThreadPoolExecutor.hpp \
     ../src/operators/OperatorToMap.hpp \
     ../src/operators/OperatorDoOnEach.hpp \
-    ../src/operators/OperatorExist.hpp
+    ../src/operators/OperatorExist.hpp \
+    ../src/operators/OnSubscribeBase.hpp \
+    ../src/operators/LiftOnSubscribe.hpp \
+    ../src/operators/OperatorSubscribeOn.hpp \
+    ../src/operators/DeferOnSubscribe.hpp \
+    ../src/operators/RangeOnSubscribe.hpp \
+    ../src/operators/RepeatOnSubscribe.hpp \
+    ../src/operators/OnSubscribeConcatMap.hpp \
+    ../src/operators/OnSubscribePeriodically.hpp \
+    ../src/TinyRxCpp.h

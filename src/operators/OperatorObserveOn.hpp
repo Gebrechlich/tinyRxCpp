@@ -1,8 +1,8 @@
 #ifndef OPERATOROBSERVEON_H
 #define OPERATOROBSERVEON_H
 #include "Operator.hpp"
-#include "MTQueue.hpp"
-#include "Scheduler.hpp"
+#include "../utils/MTQueue.hpp"
+#include "../Scheduler.hpp"
 #include <atomic>
 
 template<typename T>

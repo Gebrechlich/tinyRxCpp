@@ -1,7 +1,7 @@
 #ifndef SCHEDULERSFACTORY
 #define SCHEDULERSFACTORY
 
-#include "NewThreadScheduler.hpp"
+#include "schedulers/NewThreadScheduler.hpp"
 #include <mutex>
 
 class SchedulersFactory

@@ -2,7 +2,7 @@
 #define SUBSCRIPTION
 #include <memory>
 #include <mutex>
-#include "Util.hpp"
+#include "utils/Util.hpp"
 
 struct SubscriptionBase : std::enable_shared_from_this<SubscriptionBase>
 {

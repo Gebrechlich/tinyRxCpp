@@ -2,7 +2,7 @@
 #define OPERATORSCAN
 
 #include "Operator.hpp"
-#include "Functions.hpp"
+#include "../Functions.hpp"
 #include <type_traits>
 #include <utility>
 

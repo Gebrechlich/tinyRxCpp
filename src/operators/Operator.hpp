@@ -1,7 +1,7 @@
 #ifndef OPERATOR_H
 #define OPERATOR_H
-#include "Functions.hpp"
-#include "Subscriber.hpp"
+#include "../Functions.hpp"
+#include "../Subscriber.hpp"
 #include <memory>
 
 template<typename R, typename P>

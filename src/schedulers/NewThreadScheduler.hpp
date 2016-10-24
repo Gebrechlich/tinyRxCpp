@@ -1,9 +1,9 @@
 #ifndef NEWTHREADSCHEDULER
 #define NEWTHREADSCHEDULER
 
-#include "Scheduler.hpp"
-#include "Util.hpp"
-#include "ThreadPoolExecutor.hpp"
+#include "../Scheduler.hpp"
+#include "../utils/Util.hpp"
+#include "../utils/ThreadPoolExecutor.hpp"
 #include <thread>
 
 class NewThreadWorker;
