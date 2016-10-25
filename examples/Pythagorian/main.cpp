@@ -5,9 +5,9 @@ using namespace std;
 
 int main()
 {
-    auto values = Observable<int>::range(1,100).concatMap([](const int& a) {
-        return Observable<int>::range(1, a).concatMap([=](const int& b){
-            return Observable<int>::range(b, a).filter([=](const int& c){
+    auto values = Observable<>::range(1,100).concatMap([](const int& a) {
+        return Observable<>::range(1, a).concatMap([=](const int& b){
+            return Observable<>::range(b, a).filter([=](const int& c){
                 return b*b + c*c == a*a;
             }).map([=](const int& d){
                 return std::make_tuple(b,d,a);

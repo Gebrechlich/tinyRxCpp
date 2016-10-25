@@ -38,7 +38,7 @@ TEST(RxCppTest, From)
     std::vector<int> res;
     int arr[] = {1,2,3,4,5,6};
 
-    Observable<int>::from(arr).subscribe(
+    Observable<>::from(arr).subscribe(
                 [&](const int& i){res.push_back(i);});
 
     ASSERT_EQ(1, res[0]);
@@ -52,7 +52,7 @@ TEST(RxCppTest, From)
 
     std::vector<int> v{1,2,3,4,5,6};
 
-    Observable<int>::from(v).subscribe(
+    Observable<>::from(v).subscribe(
                 [&](const int& i){res.push_back(i);});
 
     ASSERT_EQ(1, res[0]);
@@ -66,7 +66,7 @@ TEST(RxCppTest, From)
 
     std::array<int, 6> std_a{1,2,3,4,5,6};
 
-    Observable<int>::from(std_a).subscribe(
+    Observable<>::from(std_a).subscribe(
                 [&](const int& i){res.push_back(i);});
 
     ASSERT_EQ(1, res[0]);
@@ -80,7 +80,7 @@ TEST(RxCppTest, From)
 TEST(RxCppTest, Just)
 {
     std::vector<int> res;
-    Observable<int>::just(1,2,3,4,5,6,7,8,9,10).subscribe(
+    Observable<>::just(1,2,3,4,5,6,7,8,9,10).subscribe(
                 [&](const int& i){res.push_back(i);});
 
     ASSERT_EQ(1, res[0]);
@@ -408,8 +408,8 @@ int inc()
 
 TEST(RxCppTest, Defer)
 {
-    auto values = Observable<int>::defer([](){
-        return Observable<int>::just(inc());
+    auto values = Observable<>::defer([](){
+        return Observable<>::just(inc());
     });
 
     int res = 0;
@@ -507,10 +507,10 @@ TEST(RxCppTest, ToMapKVPSelector)
 TEST(RxCppTest, ConcatMap)
 {
     auto mapper = [](const int& i){
-        return Observable<int>::just(1*i,2*i);
+        return Observable<>::just(1*i,2*i);
     };
 
-    auto values = Observable<int>::just(100,1000);
+    auto values = Observable<>::just(100,1000);
 
     std::vector<int> result;
 
@@ -529,7 +529,7 @@ TEST(RxCppTest, ConcatMap)
     values.concatMap([](const int& i){
         std::ostringstream os;
         os << i;
-        return Observable<std::string>::just(os.str());
+        return Observable<>::just(os.str());
     }).subscribe([&](const std::string s){
         sres.push_back(s);
     });
@@ -542,12 +542,15 @@ TEST(RxCppTest, ConcatMap)
 
 TEST(RxCppTest, Concat)
 {
-    auto o1 = Observable<int>::just(1);
-    auto o2 = Observable<int>::just(2);
+    auto o1 = Observable<>::just(1);
+    auto o2 = Observable<>::just(2);
+    auto o3 = Observable<>::just(3);
+    auto o4 = Observable<>::just(4);
+
 
     std::vector<int> result;
 
-    auto concatObservable = Observable<int>::concat(o1 , o2);
+    auto concatObservable = Observable<>::concat(o1, o2, o3, o4);
     concatObservable.subscribe([&](const int& i){
         result.push_back(i);
     });
@@ -555,13 +558,15 @@ TEST(RxCppTest, Concat)
 
     ASSERT_EQ(1, result[0]);
     ASSERT_EQ(2, result[1]);
+    ASSERT_EQ(3, result[2]);
+    ASSERT_EQ(4, result[3]);
 }
 
 TEST(RxCppTest, Repeat)
 {
     std::vector<int> result;
 
-    Observable<int>::range(0, 3)
+    Observable<>::range(0, 3)
             .repeat(2)
             .subscribe([&](const int& i){
         result.push_back(i);
@@ -577,29 +582,6 @@ TEST(RxCppTest, Repeat)
 
 int main(int argc, char **argv)
 {
-    auto o1 = Observable<int>::interval(std::chrono::milliseconds(0),std::chrono::milliseconds(200)).map([](const int& i){return 1;})
-            .take(5);
-
-    auto o2 = Observable<int>::interval(std::chrono::milliseconds(0),std::chrono::milliseconds(100)).map([](const int& i){return 2;})
-            .take(5);
-
-    auto o3 = Observable<int>::interval(std::chrono::milliseconds(0),std::chrono::milliseconds(100)).map([](const int& i){return 3;})
-            .take(5);
-
-    auto values = Observable<int>::concat(o1, o2, o3)
-            .subscribeOn(SchedulersFactory::instance().newThread());
-
-    auto sub = values.subscribe([](const int& i){
-        std::cout << i << std::endl;
-    },[](){
-        std::cout <<"complete\n";
-    });
-    std::cout <<"hit return to unsubscribe\n";
-    cin.get();
-
-    sub.unsubscribe();
-    std::cout <<"end\n";
-    return 0;
-//    testing::InitGoogleTest(&argc, argv);
-//    return RUN_ALL_TESTS();
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }

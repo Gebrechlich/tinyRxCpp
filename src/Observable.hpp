@@ -28,6 +28,9 @@
 #include <array>
 
 template<typename T>
+using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
+
+template<typename T = void>
 class Observable
 {
 public:
@@ -35,9 +38,7 @@ public:
     using ThisSubscriberPtrType = SubscriberPtrType<T>;
     using OnSubscribe = OnSubscribeBase<T>;
     using ThisOnSubscribePtrType = std::shared_ptr<OnSubscribe>;
-
-    template<typename R>
-    using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<R>>;
+    using ValueType = T;
 
     Observable() = default;
     ~Observable() = default;
@@ -66,119 +67,6 @@ public:
     static Observable<T> create(typename OnSubscribe::ActionFp action)
     {
         return create<T>(ThisOnSubscribePtrType(std::make_shared<OnSubscribe>(action)));
-    }
-
-    template<typename L>
-    static Observable<T> from(const L& list)
-    {
-        static_assert((std::is_array<L>::value ||
-                       is_iterable<L>::value), "Array type is required.");
-        return Observable<T>::create([list](const Observable<T>::
-                                     ThisSubscriberPtrType& subscriber)
-        {
-            auto value = std::begin(list);
-            auto end = std::end(list);
-            while(value != end)
-            {
-                subscriber->onNext(*value);
-                ++value;
-            }
-            subscriber->onComplete();
-        });
-    }
-
-    static Observable<T> just(T value)
-    {
-        return Observable<T>::create([value](const Observable<T>::
-                                     ThisSubscriberPtrType& subscriber)
-        {
-            subscriber->onNext(value);
-            subscriber->onComplete();
-        });
-    }
-
-    static Observable<T> just(const T& t1, const T& t2)
-    {
-        std::array<T,2> list = {t1, t2};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> just(const T& t1, const T& t2, const T& t3)
-    {
-        std::array<T,3> list = {t1, t2, t3};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4)
-    {
-        std::array<T,4> list = {t1, t2, t3, t4};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4, const T& t5)
-    {
-        std::array<T,5> list = {t1, t2, t3, t4, t5};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
-                              const T& t5, const T& t6)
-    {
-        std::array<T,6> list = {t1, t2, t3, t4, t5, t6};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
-                              const T& t5, const T& t6, const T& t7)
-    {
-        std::array<T,7> list = {t1, t2, t3, t4, t5, t6, t7};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
-                              const T& t5, const T& t6, const T& t7, const T& t8)
-    {
-        std::array<T,8> list = {t1, t2, t3, t4, t5, t6, t7, t8};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
-                              const T& t5, const T& t6, const T& t7, const T& t8,
-                              const T& t9)
-    {
-        std::array<T,9> list = {t1, t2, t3, t4, t5, t6, t7, t8, t9};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
-                              const T& t5, const T& t6, const T& t7, const T& t8,
-                              const T& t9, const T& t10)
-    {
-        std::array<T,10> list = {t1, t2, t3, t4, t5, t6, t7, t8, t9, t10};
-        return Observable<T>::from(list);
-    }
-
-    static Observable<T> range(T start, T count)
-    {
-        static_assert(std::is_integral<T>::value, "Integral type is required.");
-        return create(std::make_shared<RangeOnSubscribe<T>>(start, count));
-    }
-
-    template<typename Rep, typename Period>
-    static Observable<T> interval(const std::chrono::duration<Rep, Period>&  delay ,
-                                  const std::chrono::duration<Rep, Period>&  period)
-    {
-        return create(std::shared_ptr<Observable<T>::OnSubscribe>(
-                           std::make_shared<OnSubscribePeriodically<T, Rep, Period>>(
-                           SchedulersFactory::instance().newThread(), delay, period)));
-    }
-
-    template<typename ObservableFactory>
-    static Observable<T> defer(ObservableFactory&& observableFactory)
-    {
-        return create(std::shared_ptr<Observable<T>::OnSubscribe>(
-                           std::make_shared<DeferOnSubscribe<T, ObservableFactory>>(
-                           std::forward<ObservableFactory>(observableFactory))));
     }
 
     WeekSubscription subscribe(typename ThisSubscriberType::ThisOnNextFP next)
@@ -369,54 +257,9 @@ public:
     template<typename Mapper>
     typename std::result_of<Mapper(const T&)>::type concatMap(Mapper&& mapper)
     {
-        typedef decltype(observableTypeTraits(mapper(T()))) R;
-        return create<R>(std::make_shared<OnSubscribeConcatMap<T, R ,Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper)));
-    }
-
-    static Observable<T> concat(Observable<Observable<T>>& observable)
-    {
-        return observable.concatMap([](const Observable<T>& o){
-            return o;
-        });
-    }
-
-    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2)
-    {
-        auto o = std::move(Observable<Observable<T>>::just(o1, o2));
-        return concat(o);
-    }
-
-    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3)
-    {
-         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3));
-         return concat(o);
-    }
-
-    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3, const Observable<T>& o4)
-    {
-         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3, o4));
-         return concat(o);
-    }
-
-    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3, const Observable<T>& o4,
-                                const Observable<T>& o5)
-    {
-         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3, o4, o5));
-         return concat(o);
-    }
-
-    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3, const Observable<T>& o4,
-                                const Observable<T>& o5, const Observable<T>& o6)
-    {
-         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3, o4, o5, o6));
-         return concat(o);
-    }
-
-    static Observable<T> concat(const Observable<T>& o1, const Observable<T>& o2, const Observable<T>& o3, const Observable<T>& o4,
-                                const Observable<T>& o5, const Observable<T>& o6, const Observable<T>& o7)
-    {
-         auto o = std::move(Observable<Observable<T>>::just(o1, o2, o3, o4, o5, o6, o7));
-         return concat(o);
+        typedef decltype(mapper(T())) ObservableType;
+        typedef typename ObservableType::ValueType Type;
+        return create<Type>(std::make_shared<OnSubscribeConcatMap<T, Type, Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper)));
     }
 
     Observable<T> repeat(size_t count = 0)
@@ -444,6 +287,198 @@ private:
             typename ThisSubscriberType::ThisOnCompleteFP complete)
     {
         return ThisSubscriberPtrType(std::make_shared<ThisSubscriberType>(next, error, complete));
+    }
+};
+
+template<>
+class Observable<void>
+{
+public:
+    ~Observable() = delete;
+
+    template<typename T>
+    using ThisOnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
+
+    template<typename T>
+    static Observable<T> create(OnSubscribePtrType<T> onSub)
+    {
+        return Observable<T>(std::move(onSub));
+    }
+
+    template<typename T>
+    static Observable<T> create(typename OnSubscribeBase<T>::ActionFp action)
+    {
+        return Observable<T>(OnSubscribePtrType<T>(std::make_shared<OnSubscribeBase<T>>(action)));
+    }
+
+    template<typename L>
+    static auto from(const L& list) ->
+    Observable<typename std::remove_cv<typename std::remove_reference<decltype(resolveConteinerValueType(list))>::type>::type>
+
+    {
+        typedef typename std::remove_cv<typename std::remove_reference<decltype(resolveConteinerValueType(list))>::type>::type type;
+        return fromInner<type>(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(T value)
+    {
+        return Observable<T>::create([value](const typename Observable<T>::
+                                     ThisSubscriberPtrType& subscriber)
+        {
+            subscriber->onNext(value);
+            subscriber->onComplete();
+        });
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2)
+    {
+        std::array<T,2> list = {t1, t2};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2, const T& t3)
+    {
+        std::array<T,3> list = {t1, t2, t3};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4)
+    {
+        std::array<T,4> list = {t1, t2, t3, t4};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4, const T& t5)
+    {
+        std::array<T,5> list = {t1, t2, t3, t4, t5};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6)
+    {
+        std::array<T,6> list = {t1, t2, t3, t4, t5, t6};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6, const T& t7)
+    {
+        std::array<T,7> list = {t1, t2, t3, t4, t5, t6, t7};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6, const T& t7, const T& t8)
+    {
+        std::array<T,8> list = {t1, t2, t3, t4, t5, t6, t7, t8};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6, const T& t7, const T& t8,
+                              const T& t9)
+    {
+        std::array<T,9> list = {t1, t2, t3, t4, t5, t6, t7, t8, t9};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> just(const T& t1, const T& t2, const T& t3, const T& t4,
+                              const T& t5, const T& t6, const T& t7, const T& t8,
+                              const T& t9, const T& t10)
+    {
+        std::array<T,10> list = {t1, t2, t3, t4, t5, t6, t7, t8, t9, t10};
+        return from(list);
+    }
+
+    template<typename T>
+    static Observable<T> range(T start, T count)
+    {
+        static_assert(std::is_integral<T>::value, "Integral type is required.");
+        return create<T>(std::make_shared<RangeOnSubscribe<T>>(start, count));
+    }
+
+    template<typename ObservableFactory>
+    static auto defer(ObservableFactory&& observableFactory) ->
+    typename std::result_of<ObservableFactory()>::type
+    {
+        typedef typename std::result_of<ObservableFactory()>::type ObservableType;
+        typedef typename ObservableType::ValueType Type;
+        return create<Type>(std::make_shared<DeferOnSubscribe<Type,
+                            ObservableFactory>>(std::forward<ObservableFactory>(observableFactory)));
+    }
+
+    template<typename Rep, typename Period>
+    static Observable<size_t> interval(const std::chrono::duration<Rep, Period>&  delay ,
+                                  const std::chrono::duration<Rep, Period>&  period)
+    {
+        return create(std::shared_ptr<Observable<size_t>::OnSubscribe>(
+                           std::make_shared<OnSubscribePeriodically<size_t, Rep, Period>>(
+                           SchedulersFactory::instance().newThread(), delay, period)));
+    }
+
+    template<typename Rep, typename Period>
+    static Observable<size_t> interval(
+                                  const std::chrono::duration<Rep, Period>&  period)
+    {
+        return interval(std::chrono::duration<Rep, Period>(0), period);
+    }
+
+    template<typename T>
+    static Observable<T> concat(Observable<Observable<T>>& observable)
+    {
+        return observable.concatMap([](const Observable<T>& o){
+            return o;
+        });
+    }
+
+    template<typename T, typename ...R>
+    static Observable<T> concat(const Observable<T>& a, const Observable<R>& ...args)
+    {
+        auto o = std::move(just(a, args...));
+        return concat(o);
+    }
+
+    template<typename T>
+    static WeekSubscription subscribe(SubscriberPtrType<T> subscriber,
+                          Observable<T>* observable)
+    {
+        std::weak_ptr<SubscriptionBase> ptr = subscriber;
+        WeekSubscription subs(std::move(ptr));
+        subscriber->onStart();
+        (*observable->onSubscribe)(subscriber);
+        return subs;
+    }
+
+private:
+    template<typename T, typename L>
+    static Observable<T> fromInner(const L& list)
+    {
+        static_assert((std::is_array<L>::value ||
+                       is_iterable<L>::value), "Array type is required.");
+
+        return Observable<T>::create([list](const typename Observable<T>::
+                                     ThisSubscriberPtrType& subscriber)
+        {
+            auto value = std::begin(list);
+            auto end = std::end(list);
+            while(value != end)
+            {
+                subscriber->onNext(*value);
+                ++value;
+            }
+            subscriber->onComplete();
+        });
     }
 };
 
