@@ -24,14 +24,14 @@ public:
         auto subscription = worker->getSubscription();
         s->add(subscription);
         auto ssubscription = worker->schedulePeriodically(std::make_shared<Action0>([this](){
-            static int count = 0;
-            this->subscriber->onNext(count);
-            ++count;
+            this->subscriber->onNext(this->count);
+            ++this->count;
         }),delay, period);
         s->add(ssubscription);
     }
 
 private:
+    int count = 0;
     Scheduler::SchedulerRefType scheduler;
     Scheduler::WorkerRefType worker;
     const std::chrono::duration<Rep, Period> delay;

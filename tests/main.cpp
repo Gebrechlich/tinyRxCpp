@@ -33,6 +33,30 @@ TEST(RxCppTest, Subscribe)
     ASSERT_EQ(10, res);
 }
 
+TEST(RxCppTest, Error)
+{
+    auto values = Observable<int>::
+            create([](const Observable<int>::ThisSubscriberPtrType& t)
+    {
+        t->onNext(10);
+        t->onError(std::make_exception_ptr(some_exception(100)));
+        t->onComplete();
+    });
+
+    int errorCode = 0;
+    values.subscribe([](const int&){},[&](std::exception_ptr ex){
+        try {
+            if (ex) {
+                std::rethrow_exception(ex);
+            }
+        } catch(const some_exception& e) {
+            errorCode = e.v;
+        }
+    });
+
+    ASSERT_EQ(100, errorCode);
+}
+
 TEST(RxCppTest, From)
 {
     std::vector<int> res;
@@ -579,6 +603,7 @@ TEST(RxCppTest, Repeat)
     ASSERT_EQ(1, result[4]);
     ASSERT_EQ(2, result[5]);
 }
+
 
 int main(int argc, char **argv)
 {
