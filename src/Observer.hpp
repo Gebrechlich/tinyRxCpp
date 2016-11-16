@@ -1,6 +1,7 @@
 #ifndef OBSERVER_H
 #define OBSERVER_H
 #include "Functions.hpp"
+#include <exception>
 
 template<typename T>
 struct Observer
@@ -35,6 +36,10 @@ struct Observer
         if(onErrorFp)
         {
             onErrorFp(ex);
+        }
+        else
+        {
+            std::rethrow_exception(ex);
         }
     }
 

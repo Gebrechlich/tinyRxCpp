@@ -9,8 +9,8 @@ class OperatorSubscribeOn : public OnSubscribeBase<T>
 public:
     using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
 
-    OperatorSubscribeOn(OnSubscribePtrType source, Scheduler::SchedulerRefType&& s) :
-        source(source), scheduler(std::move(s))
+    OperatorSubscribeOn(OnSubscribePtrType source,const Scheduler::SchedulerRefType& s) :
+        source(source), scheduler(s)
     {}
 
     class ThreadAction : public Action0
@@ -31,9 +31,8 @@ public:
     void operator()(const SubscriberPtrType<T>& subscriber) override
     {
         worker = std::move(scheduler->createWorker());
-        auto subscription = worker->getSubscription();
+        auto subscription = worker->schedule(std::unique_ptr<Action0>(make_unique<ThreadAction>(source, subscriber)));
         subscriber->add(subscription);
-        worker->schedule(std::unique_ptr<Action0>(make_unique<ThreadAction>(source, subscriber)));
     }
 private:
     OnSubscribePtrType source;

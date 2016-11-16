@@ -1,71 +1,45 @@
 #ifndef NEWTHREADSCHEDULER
 #define NEWTHREADSCHEDULER
-
 #include "../Scheduler.hpp"
-#include "../utils/Util.hpp"
-#include "../utils/ThreadPoolExecutor.hpp"
 #include <thread>
-
-class NewThreadWorker;
 
 class NewThreadScheduler : public Scheduler
 {
 public:
+    NewThreadScheduler()
+    {}
+
     WorkerRefType createWorker() override
     {
-        return std::move(make_unique<NewThreadWorker>());
+        return std::make_shared<NewThreadWorker>();
     }
-
 protected:
     class NewThreadWorker : public Scheduler::Worker
     {
-        struct NewThreadSubscription;
     public:
-        NewThreadWorker() : executor(1), subscription(std::make_shared<NewThreadSubscription>(executor))
-        {}
-
-        NewThreadWorker(NewThreadWorker&&) = default;
-        NewThreadWorker& operator = (NewThreadWorker&&) = default;
-
-        NewThreadWorker(const NewThreadWorker&) = delete;
-        NewThreadWorker& operator = (const NewThreadWorker&) = delete;
-
-        void scheduleInteranal(ActionRefType action) override
+        ~NewThreadWorker()
         {
-             executor.submit(action);
+            if(workThread.joinable())
+            {
+                workThread.detach();
+            }
         }
-
-        virtual SharedSubscription getSubscription() override
+        SubscriptionPtrType scheduleInteranal(ActionRefType action) override
         {
-            return subscription;
+            realAction = action;
+            workThread = std::thread(&NewThreadWorker::run, this);
+            return nullptr;
         }
     private:
-
-        struct NewThreadSubscription : public SubscriptionBase
+        virtual void run()
         {
-            NewThreadSubscription(ThreadPoolExecutor& e) : executor(e), isUnsub(false)
-            {}
-
-            bool isUnsubscribe() override
+            if(realAction)
             {
-                if(isUnsub.load())
-                {
-                    executor.shutdown();
-                }
-                return isUnsub.load();
+                (*realAction)();
             }
-
-            void unsubscribe() override
-            {
-                isUnsub.store(true);
-            }
-
-            ThreadPoolExecutor& executor;
-            std::atomic<bool> isUnsub;
-        };
-
-        ThreadPoolExecutor executor;
-        SharedSubscription subscription;
+        }
+        std::thread workThread;
+        ActionRefType realAction;
     };
 };
 

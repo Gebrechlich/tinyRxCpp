@@ -26,14 +26,11 @@ HEADERS += \
     ../src/operators/Operator.hpp \
     ../src/operators/OperatorScan.hpp \
     ../src/operators/OperatorLast.hpp \
-    ../src/Subscription.h \
     ../src/Scheduler.hpp \
     ../src/schedulers/NewThreadScheduler.hpp \
     ../src/SchedulersFactory.hpp \
-    ../src/SubscriptionsList.hpp \
     ../src/utils/Util.hpp \
     ../src/operators/OperatorTake.hpp \
-    ../src/Producer.hpp \
     ../src/operators/OperatorObserveOn.hpp \
     ../src/utils/MTQueue.hpp \
     ../src/utils/ThreadPoolExecutor.hpp \
@@ -48,4 +45,8 @@ HEADERS += \
     ../src/operators/RepeatOnSubscribe.hpp \
     ../src/operators/OnSubscribeConcatMap.hpp \
     ../src/operators/OnSubscribePeriodically.hpp \
-    ../src/TinyRxCpp.h
+    ../src/TinyRxCpp.h \
+    ../src/operators/OnSubscribeFlatMap.hpp \
+    ../src/schedulers/ThreadPoolScheduler.hpp \
+    ../src/Subscription.hpp \
+    ../src/operators/OperatorTakeWhile.hpp

@@ -2,6 +2,7 @@
 #define SUBSCRIPTION
 #include <memory>
 #include <mutex>
+#include <vector>
 #include "utils/Util.hpp"
 
 struct SubscriptionBase : std::enable_shared_from_this<SubscriptionBase>
@@ -48,35 +49,38 @@ private:
     std::weak_ptr<SubscriptionBase> subscriptionPtr;
 };
 
-class SharedSubscription : public SubscriptionBase
+class SubscriptionsList : public SubscriptionBase
 {
 public:
-    SharedSubscription(){}
-
-    SharedSubscription(std::shared_ptr<SubscriptionBase>&& ptr) :
-        subscriptionPtr(std::move(ptr)){}
-
-    SharedSubscription(const std::shared_ptr<SubscriptionBase>& ptr) :
-        subscriptionPtr(ptr){}
-
-    bool isUnsubscribe() override
+    void add(const SubscriptionPtrType& subscription)
     {
-        if(subscriptionPtr)
-        {
-            return subscriptionPtr->isUnsubscribe();
-        }
-        return true;
+        subscriptions.push_back(subscription);
     }
 
-    void unsubscribe() override
+    bool isUnsubscribe()
     {
-        if(subscriptionPtr)
+        return unsubscr;
+    }
+
+    void unsubscribe()
+    {
+        if(!unsubscr)
         {
-            subscriptionPtr->unsubscribe();
+            std::lock_guard<std::mutex> l(lockMutex);
+            for(auto s : subscriptions)
+            {
+                if(s != nullptr && !s->isUnsubscribe())
+                {
+                    s->unsubscribe();
+                }
+            }
+            unsubscr = true;
         }
     }
 private:
-    std::shared_ptr<SubscriptionBase> subscriptionPtr;
+    std::vector<SubscriptionPtrType> subscriptions;
+    std::mutex lockMutex;
+    volatile bool unsubscr = false;
 };
 
 #endif // SUBSCRIPTION

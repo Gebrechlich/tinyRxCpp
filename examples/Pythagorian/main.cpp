@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include "TinyRxCpp.h"
 
 using namespace std;
@@ -16,7 +17,9 @@ int main()
     });
 
     values.subscribe([](const std::tuple<int,int,int>& t){
-        cout << std::get<0>(t) << "  "<<std::get<1>(t)<<"  "<< std::get<2>(t) << std::endl;
+        cout << setw(2) << std::get<0>(t) << "  "<<
+                setw(2) << std::get<1>(t)<<"  "<<
+                setw(2) << std::get<2>(t) << std::endl;
     });
     return 0;
 }

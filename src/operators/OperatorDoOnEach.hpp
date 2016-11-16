@@ -21,25 +21,34 @@ class OperatorDoOnEach : public Operator<T,T>
 
         void onNext(const T& t) override
         {
-            onNextAct(t);
-            this->child->onNext(t);
+            if(!done)
+            {
+                onNextAct(t);
+                if(!this->child->isUnsubscribe())
+                {
+                    this->child->onNext(t);
+                }
+            }
         }
 
         void onError(std::exception_ptr ex) override
         {
             onErrorAct(ex);
             this->child->onError(ex);
+            done = true;
         }
 
         void onComplete() override
         {
             onCompleteAct();
             this->child->onComplete();
+            done = true;
         }
 
         OnNextType onNextAct;
         OnErrorType onErrorAct;
         OnCopmleteType onCompleteAct;
+        volatile bool done = false;
     };
 
 public:

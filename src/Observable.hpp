@@ -11,6 +11,7 @@
 #include "operators/OperatorScan.hpp"
 #include "operators/OperatorLast.hpp"
 #include "operators/OperatorTake.hpp"
+#include "operators/OperatorTakeWhile.hpp"
 #include "operators/OperatorObserveOn.hpp"
 #include "operators/OperatorToMap.hpp"
 #include "operators/OperatorDoOnEach.hpp"
@@ -20,12 +21,14 @@
 #include "operators/RangeOnSubscribe.hpp"
 #include "operators/RepeatOnSubscribe.hpp"
 #include "operators/OnSubscribeConcatMap.hpp"
+#include "operators/OnSubscribeFlatMap.hpp"
 #include "operators/OnSubscribePeriodically.hpp"
 #include "SchedulersFactory.hpp"
 #include "utils/Util.hpp"
 #include <memory>
 #include <initializer_list>
 #include <array>
+
 
 template<typename T>
 using OnSubscribePtrType = std::shared_ptr<OnSubscribeBase<T>>;
@@ -69,48 +72,55 @@ public:
         return create<T>(ThisOnSubscribePtrType(std::make_shared<OnSubscribe>(action)));
     }
 
-    WeekSubscription subscribe(typename ThisSubscriberType::ThisOnNextFP next)
+    SubscriptionPtrType subscribe(typename ThisSubscriberType::ThisOnNextFP next)
     {
         return Observable<T>::subscribe(std::move(createSubscriber(next,
                        typename ThisSubscriberType::ThisOnErrorFP(),
                        typename ThisSubscriberType::ThisOnCompleteFP())), this);
     }
 
-    WeekSubscription subscribe(typename ThisSubscriberType::ThisOnNextFP next,
+    SubscriptionPtrType subscribe(typename ThisSubscriberType::ThisOnNextFP next,
                    typename ThisSubscriberType::ThisOnCompleteFP complete)
     {
         return Observable<T>::subscribe(std::move(createSubscriber(next,
                    typename ThisSubscriberType::ThisOnErrorFP(), complete)), this);
     }
 
-    WeekSubscription subscribe(typename ThisSubscriberType::ThisOnNextFP next,
+    SubscriptionPtrType subscribe(typename ThisSubscriberType::ThisOnNextFP next,
                    typename ThisSubscriberType::ThisOnErrorFP error,
                    typename ThisSubscriberType::ThisOnCompleteFP complete)
     {
         return Observable<T>::subscribe(std::move(createSubscriber(next, error, complete)), this);
     }
 
-    WeekSubscription subscribe(typename ThisSubscriberType::ThisOnNextFP next,
+    SubscriptionPtrType subscribe(typename ThisSubscriberType::ThisOnNextFP next,
                    typename ThisSubscriberType::ThisOnErrorFP error)
     {
         return Observable<T>::subscribe(std::move(createSubscriber(next, error,
                    typename ThisSubscriberType::ThisOnCompleteFP())), this);
     }
 
-    WeekSubscription subscribe(ThisSubscriberPtrType subscriber)
+    SubscriptionPtrType subscribe(ThisSubscriberPtrType subscriber)
     {
         return Observable<T>::subscribe(subscriber, this);
     }
 
-    Observable<T> subscribeOn(Scheduler::SchedulerRefType&& scheduler)
+    Observable<T> subscribeOn(const Scheduler::SchedulerRefType& scheduler)
     {
         return create(std::shared_ptr<Observable<T>::OnSubscribe>(
-                          std::make_shared<OperatorSubscribeOn<T>>(this->onSubscribe, std::move(scheduler))));
+                          std::make_shared<OperatorSubscribeOn<T>>(this->onSubscribe, scheduler)));
     }
 
-    Observable<T> observeOn(Scheduler::SchedulerRefType&& scheduler)
+    Observable<T> observeOn(const Scheduler::SchedulerRefType& scheduler)
     {
-        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorObserveOn<T>>(std::move(scheduler))),
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorObserveOn<T>>(scheduler,
+                                                                                      std::numeric_limits<int>::max())),
+                    this->onSubscribe);
+    }
+
+    Observable<T> observeOn(const Scheduler::SchedulerRefType& scheduler, size_t bufferSize)
+    {
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorObserveOn<T>>(scheduler, bufferSize)),
                     this->onSubscribe);
     }
 
@@ -151,6 +161,15 @@ public:
     Observable<T> take(size_t index)
     {
         return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorTake<T>>(index)));
+    }
+
+    template<typename Predicate>
+    Observable<T> takeWhile(Predicate&& pred)
+    {
+        static_assert(std::is_same<typename std::result_of<Predicate(const T&)>::type, bool>::value,
+                      "Predicate(T&) must return a bool value");
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorTakeWhile<T, Predicate>>
+                                                   (std::forward<Predicate>(pred))));
     }
 
     template<typename OnNext, typename OnError, typename OnComplete>
@@ -262,6 +281,14 @@ public:
         return create<Type>(std::make_shared<OnSubscribeConcatMap<T, Type, Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper)));
     }
 
+    template<typename Mapper>
+    typename std::result_of<Mapper(const T&)>::type flatMap(Mapper&& mapper)
+    {
+         typedef decltype(mapper(T())) ObservableType;
+         typedef typename ObservableType::ValueType Type;
+         return create<Type>(std::make_shared<OnSubscribeFlatMap<T, Type, Mapper>>(this->onSubscribe, std::forward<Mapper>(mapper)));
+    }
+
     Observable<T> repeat(size_t count = 0)
     {
         return create<T>(std::make_shared<RepeatOnSubscribe<T>>(this->onSubscribe, count));
@@ -269,11 +296,11 @@ public:
 
 protected:
     template<typename B>
-    static WeekSubscription subscribe(SubscriberPtrType<B> subscriber,
+    static SubscriptionPtrType subscribe(SubscriberPtrType<B> subscriber,
                           Observable<B>* observable)
     {
         std::weak_ptr<SubscriptionBase> ptr = subscriber;
-        WeekSubscription subs(std::move(ptr));
+        SubscriptionPtrType subs = std::make_shared<WeekSubscription>(std::move(ptr));
         subscriber->onStart();
         (*observable->onSubscribe)(subscriber);
         return subs;
@@ -420,18 +447,24 @@ public:
 
     template<typename Rep, typename Period>
     static Observable<size_t> interval(const std::chrono::duration<Rep, Period>&  delay ,
-                                  const std::chrono::duration<Rep, Period>&  period)
+                                       const std::chrono::duration<Rep, Period>&  period,
+                                       size_t count = std::numeric_limits<size_t>::max())
     {
         return create(std::shared_ptr<Observable<size_t>::OnSubscribe>(
                            std::make_shared<OnSubscribePeriodically<size_t, Rep, Period>>(
-                           SchedulersFactory::instance().newThread(), delay, period)));
+                           SchedulersFactory::instance().newThread(), delay, period, count)));
     }
 
     template<typename Rep, typename Period>
-    static Observable<size_t> interval(
-                                  const std::chrono::duration<Rep, Period>&  period)
+    static Observable<size_t> interval(const std::chrono::duration<Rep, Period>&  period)
     {
         return interval(std::chrono::duration<Rep, Period>(0), period);
+    }
+
+    template<typename Rep, typename Period>
+    static Observable<size_t> time(const std::chrono::duration<Rep, Period>&  delay)
+    {
+        return interval(std::chrono::duration<Rep, Period>(delay), std::chrono::duration<Rep, Period>(0), 1);
     }
 
     template<typename T>
@@ -450,14 +483,18 @@ public:
     }
 
     template<typename T>
-    static WeekSubscription subscribe(SubscriberPtrType<T> subscriber,
-                          Observable<T>* observable)
+    static Observable<T> merge(Observable<Observable<T>>& observable)
     {
-        std::weak_ptr<SubscriptionBase> ptr = subscriber;
-        WeekSubscription subs(std::move(ptr));
-        subscriber->onStart();
-        (*observable->onSubscribe)(subscriber);
-        return subs;
+        return observable.flatMap([](const Observable<T>& o){
+            return o;
+        });
+    }
+
+    template<typename T, typename ...R>
+    static Observable<T> merge(const Observable<T>& a, const Observable<R>& ...args)
+    {
+        auto o = std::move(just(a, args...));
+        return merge(o);
     }
 
 private:

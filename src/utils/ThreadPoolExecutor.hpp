@@ -3,7 +3,7 @@
 
 #include "../Functions.hpp"
 #include "MTQueue.hpp"
-#include "../Subscription.h"
+#include "../Subscription.hpp"
 #include <thread>
 #include <vector>
 #include <atomic>
@@ -29,14 +29,21 @@ public:
 
     virtual ~ThreadPoolExecutor()
     {
-        done.store(true);
+        shutdown();
         submitLock.lock();
 
         for(size_t i = 0; i < workers.size(); ++i)
         {
             if(workers[i].joinable())
             {
-                workers[i].join();
+                if(actions.size() > 0)
+                {
+                    workers[i].join();
+                }
+                else
+                {
+                    workers[i].detach();
+                }
             }
         }
 

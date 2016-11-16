@@ -203,8 +203,7 @@ TEST(RxCppTest, Distinct)
         t->onComplete();
     });
     std::vector<int> res;
-    values.distinct(
-                ).subscribe([&](const int& i){res.push_back(i);});
+    values.distinct().subscribe([&](const int& i){res.push_back(i);});
 
     ASSERT_EQ(1, res[0]);
     ASSERT_EQ(2, res[1]);
@@ -292,7 +291,9 @@ TEST(RxCppTest, DoOn)
         {
             error = true;
         }
-    }).subscribe([&](const int&){});
+    }).subscribe([&](const int&){},[&error](std::exception_ptr ex){
+
+    });
 
     ASSERT_TRUE(error);
 }

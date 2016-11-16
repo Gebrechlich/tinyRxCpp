@@ -2,7 +2,10 @@
 #define SCHEDULERSFACTORY
 
 #include "schedulers/NewThreadScheduler.hpp"
+#include "schedulers/ThreadPoolScheduler.hpp"
 #include <mutex>
+
+#define DEFAULT_THREAD_POOL_SIZE std::thread::hardware_concurrency() * 2
 
 class SchedulersFactory
 {
@@ -25,6 +28,19 @@ public:
         }
         return newThreadInstance;
     }
+
+    Scheduler::SchedulerRefType threadPoolScheduler(size_t poolSize = DEFAULT_THREAD_POOL_SIZE)
+    {
+        if(!threadPoolInstance)
+        {
+            std::lock_guard<std::mutex> l(lockMutex);
+            if(!threadPoolInstance)
+            {
+                threadPoolInstance = std::make_shared<ThreadPoolScheduler>(poolSize);
+            }
+        }
+        return threadPoolInstance;
+    }
 private:
     SchedulersFactory() = default;
     ~SchedulersFactory() = default;
@@ -32,6 +48,7 @@ private:
 
     std::mutex lockMutex;
     Scheduler::SchedulerRefType newThreadInstance;
+    Scheduler::SchedulerRefType threadPoolInstance;
 };
 
 #endif // SCHEDULERSFACTORY

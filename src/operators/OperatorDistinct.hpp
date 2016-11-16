@@ -4,7 +4,8 @@
 #include "Operator.hpp"
 #include <type_traits>
 #include <utility>
-#include <set>
+#include <unordered_set>
+#include <mutex>
 
 template<typename T>
 T asIs(const T& t)
@@ -30,14 +31,16 @@ class OperatorDistinct : public Operator<T,T>
         void onNext(const T& t) override
         {
             KeyType k = keyGenerator(t);
+            std::lock_guard<std::mutex> ul(mut);
             if(values.insert(k).second)
             {
                 this->child->onNext(t);
             }
         }
 
-        std::set<KeyType> values;
+        std::unordered_set<KeyType> values;
         KeyGenType keyGenerator;
+        std::mutex mut;
     };
 
 public:

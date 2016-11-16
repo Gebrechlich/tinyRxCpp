@@ -1,8 +1,7 @@
 #ifndef SUBSCRIBER_H
 #define SUBSCRIBER_H
 #include "Observer.hpp"
-#include "SubscriptionsList.hpp"
-#include "Producer.hpp"
+#include "Subscription.hpp"
 
 template<typename T>
 class Subscriber : public Observer<T>, public SubscriptionBase
@@ -25,31 +24,15 @@ public:
         subscriptions.unsubscribe();
     }
 
-    void add(const SharedSubscription& subscription)
+    void add(const SubscriptionPtrType& subscription)
     {
         subscriptions.add(subscription);
     }
 
     virtual void onStart()
     {}
-
-    void setProducer(const ProducerRef& p)
-    {
-        std::lock_guard<std::mutex> lk(lockMutex);
-        producer = p;
-    }
-
-    void request(unsigned int n)
-    {
-        std::lock_guard<std::mutex> lk(lockMutex);
-        if(producer)
-        {
-            producer->request(n);
-        }
-    }
 protected:
     SubscriptionsList subscriptions;
-    ProducerRef producer;
     std::mutex lockMutex;
 };
 

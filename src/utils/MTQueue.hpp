@@ -19,11 +19,27 @@ public:
 
     MTQueue& operator=(const MTQueue&) = delete;
 
+    void setLimit(size_t l)
+    {
+        limit = l;
+    }
+
     void push(const T& dat)
     {
         std::lock_guard<std::mutex> lk(mut);
         data_queue.push(dat);
         cond.notify_one();
+    }
+
+    bool offer(const T& dat)
+    {
+        size_t s = size();
+        if(s >= limit)
+        {
+            return false;
+        }
+        push(dat);
+        return true;
     }
 
     bool tryPop(T& value)
@@ -98,6 +114,12 @@ public:
         return data_queue.empty();
     }
 
+    size_t size() const
+    {
+        std::lock_guard<std::mutex> ul(mut);
+        return data_queue.size();
+    }
+
     void clear()
     {
         std::lock_guard<std::mutex> ul(mut);
@@ -109,6 +131,7 @@ private:
     mutable std::mutex mut;
     std::condition_variable cond;
     std::queue<T> data_queue;
+    size_t limit = sizeof(size_t);
 };
 
 #endif // MTQUEUE

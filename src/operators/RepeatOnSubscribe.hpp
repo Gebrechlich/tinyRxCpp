@@ -55,7 +55,7 @@ public:
         }
 
         auto innerSubscriber = std::make_shared<InnerSubscriber>(subscriber, count);
-        subscriber->add(SharedSubscription(innerSubscriber));
+        subscriber->add(innerSubscriber);
 
         while((infinitely || count--) && !subscriber->isUnsubscribe())
         {
