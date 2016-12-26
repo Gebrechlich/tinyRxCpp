@@ -49,4 +49,6 @@ HEADERS += \
     ../src/operators/OnSubscribeFlatMap.hpp \
     ../src/schedulers/ThreadPoolScheduler.hpp \
     ../src/Subscription.hpp \
-    ../src/operators/OperatorTakeWhile.hpp
+    ../src/operators/OperatorTakeWhile.hpp \
+    ../src/operators/OperatorSynchronize.hpp \
+    ../src/exceptions/TRExceptions.hpp

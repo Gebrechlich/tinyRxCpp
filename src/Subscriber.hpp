@@ -33,7 +33,6 @@ public:
     {}
 protected:
     SubscriptionsList subscriptions;
-    std::mutex lockMutex;
 };
 
 template<typename T, typename U>

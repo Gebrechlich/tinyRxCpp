@@ -17,17 +17,18 @@ protected:
     class NewThreadWorker : public Scheduler::Worker
     {
     public:
-        ~NewThreadWorker()
-        {
-            if(workThread.joinable())
-            {
-                workThread.detach();
-            }
-        }
+//        ~NewThreadWorker()
+//        {
+//            if(workThread.joinable())
+//            {
+//                workThread.detach();
+//            }
+//        }
         SubscriptionPtrType scheduleInteranal(ActionRefType action) override
         {
             realAction = action;
-            workThread = std::thread(&NewThreadWorker::run, this);
+            std::thread workThread = std::thread(&NewThreadWorker::run, this);
+            workThread.detach();
             return nullptr;
         }
     private:
@@ -38,7 +39,7 @@ protected:
                 (*realAction)();
             }
         }
-        std::thread workThread;
+//        std::thread workThread;
         ActionRefType realAction;
     };
 };

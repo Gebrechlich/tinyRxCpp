@@ -23,6 +23,7 @@
 #include "operators/OnSubscribeConcatMap.hpp"
 #include "operators/OnSubscribeFlatMap.hpp"
 #include "operators/OnSubscribePeriodically.hpp"
+#include "operators/OperatorSynchronize.hpp"
 #include "SchedulersFactory.hpp"
 #include "utils/Util.hpp"
 #include <memory>
@@ -114,7 +115,7 @@ public:
     Observable<T> observeOn(const Scheduler::SchedulerRefType& scheduler)
     {
         return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorObserveOn<T>>(scheduler,
-                                                                                      std::numeric_limits<int>::max())),
+                                                                                      std::numeric_limits<size_t>::max())),
                     this->onSubscribe);
     }
 
@@ -294,6 +295,17 @@ public:
         return create<T>(std::make_shared<RepeatOnSubscribe<T>>(this->onSubscribe, count));
     }
 
+    template<typename L>
+    Observable<T> synchronize(L lock)
+    {
+        return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorSynchronize<T,L>>(lock)));
+    }
+
+    Observable<T> synchronize()
+    {
+       return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorSynchronize<T,std::mutex>>(std::mutex())));
+    }
+
 protected:
     template<typename B>
     static SubscriptionPtrType subscribe(SubscriberPtrType<B> subscriber,
@@ -344,7 +356,39 @@ public:
 
     {
         typedef typename std::remove_cv<typename std::remove_reference<decltype(resolveConteinerValueType(list))>::type>::type type;
-        return fromInner<type>(list);
+        return fromList<type>(list);
+    }
+
+    template<typename C>
+    static Observable<std::basic_string<C>> from(std::shared_ptr<std::basic_istream<C>> is)
+    {
+        typedef std::basic_string<C> StringType;
+        return Observable<StringType>::create([is](const typename Observable<StringType>::ThisSubscriberPtrType& subscriber)
+        {
+            if(!is)
+            {
+                subscriber->onError(std::make_exception_ptr(NullPointerException()));
+                return;
+            }
+
+            if((*is).rdstate() != std::ios_base::goodbit)
+            {
+                subscriber->onError(std::make_exception_ptr(StreamNotOpenException()));
+                return;
+            }
+
+            StringType line;
+            while (std::getline(*is, line))
+            {
+                subscriber->onNext(line);
+                if(!(*is).good())
+                {
+                    subscriber->onError(std::make_exception_ptr(BadStreamException()));
+                    break;
+                }
+            }
+            subscriber->onComplete();
+        });
     }
 
     template<typename T>
@@ -499,7 +543,7 @@ public:
 
 private:
     template<typename T, typename L>
-    static Observable<T> fromInner(const L& list)
+    static Observable<T> fromList(const L& list)
     {
         static_assert((std::is_array<L>::value ||
                        is_iterable<L>::value), "Array type is required.");

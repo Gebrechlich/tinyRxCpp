@@ -4,15 +4,7 @@
 #include "../utils/MTQueue.hpp"
 #include "../Scheduler.hpp"
 #include <atomic>
-#include <exception>
-
-struct SlowSubscriberException: public std::exception
-{
-  virtual const char* what() const noexcept
-  {
-    return "Processing data by subscriber is too slow.";
-  }
-};
+#include "../exceptions/TRExceptions.hpp"
 
 template<typename T>
 class OperatorObserveOn : public Operator<T,T>
@@ -24,112 +16,141 @@ class OperatorObserveOn : public Operator<T,T>
     {
         struct State
         {
-            State() : finished(false), ex(nullptr)
+            State(SubscriptionBase* subscription) :
+                finished(false), currentValuesCount(0), ex(nullptr), subscription(subscription)
             {}
-            volatile bool finished;
+            std::atomic_bool finished;
+            std::atomic_size_t currentValuesCount;
             std::exception_ptr ex;
+            SubscriptionBase* subscription;
+            std::mutex locker;
+            MTQueue<T> queue;
         };
+
+        using StateRefType = std::shared_ptr<State>;
 
         struct ThreadAction : public Action0
         {
-            ThreadAction(const ThisSubscriberType& c, const std::shared_ptr<MTQueue<T>>& q,
-                         SubscriptionBase& s, State& st) : child(c), queue(q),
-                subscription(s), state(st)
+            ThreadAction(const ThisSubscriberType& c, StateRefType st)
+                : child(c), state(st)
             {}
 
             void operator()() override
             {
                 while(true)
                 {
-                    if(checkTerminateState())
+                    bool done = state->finished.load();
+                    bool empty = state->queue.empty();
+                    size_t valuesCount = state->currentValuesCount.load();
+
+                    bool terminate = checkTerminateState(done, empty, valuesCount, state->locker);
+
+                    if(terminate || state->queue.empty())
                     {
                         return;
                     }
+
                     T v;
-                    bool res = (*queue).waitForAndPop(v, std::chrono::seconds(TIME_TO_WAIT));
+                    bool res = (state->queue).tryPop(v);
                     if(res)
                     {
                         child->onNext(v);
+                        --state->currentValuesCount;
                     }
                 }
             }
 
-            bool checkTerminateState()
+            bool checkTerminateState(bool isDone, bool isEmpty, size_t valuesCount, std::mutex& lock)
             {
-                if(subscription.isUnsubscribe())
+                if(state->subscription->isUnsubscribe())
                 {
-                    if(!queue->empty())
+                    if(!isEmpty)
                     {
-                        queue->clear();
+                        state->queue.clear();
                     }
                     return true;
                 }
-                else if(state.finished)
+                else if(isDone)
                 {
-                    if(!queue->empty())
+                    if(!isEmpty)
                     {
-                        if(state.ex)
+                        std::unique_lock<std::mutex> locker(lock);
+                        if(state->ex)
                         {
-                            queue->clear();
-                            child->onError(state.ex);
+                            state->queue.clear();
+                            child->onError(state->ex);
+                            state->ex = nullptr;
+                            state->subscription->unsubscribe();
                             return true;
                         }
                         return false;
+                    } else if(valuesCount == 0)
+                    {
+                        std::unique_lock<std::mutex> locker(lock);
+                        if(!state->subscription->isUnsubscribe())
+                        {
+                            child->onComplete();
+                            state->subscription->unsubscribe();
+                        }
+                        return true;
                     }
-                    child->onComplete();
-                    return true;
                 }
                 return false;
             }
 
-            const int TIME_TO_WAIT = 2;
             ThisSubscriberType child;
-            std::shared_ptr<MTQueue<T>> queue;
-            SubscriptionBase& subscription;
-            State& state;
+            StateRefType state;
         };
 
         ObserveOnSubscriber(ThisSubscriberType p,const Scheduler::SchedulerRefType& s, size_t bufferSize) :
             CompositeSubscriber<T,T>(p), scheduler(s), bufferSize(bufferSize)
-        {
-            queue = std::make_shared<MTQueue<T>>();
-            queue->setLimit(bufferSize);
-        }
+        {}
 
         void onNext(const T& t) override
         {
-            if(!this->isUnsubscribe() && !state.finished)
+            if(!this->isUnsubscribe() && !state->finished.load())
             {
-                if(!(*queue).offer(t))
+                if(!state->queue.offer(std::move(t)))
                 {
                     throw SlowSubscriberException();
                 }
+                ++state->currentValuesCount;
+                auto ssubscription = worker->schedule(std::make_shared<ThreadAction>(this->child, state));
+                this->add(ssubscription);
             }
         }
 
         void onComplete() override
         {
-            state.finished = true;
+            if(!state->finished.load())
+            {
+                state->finished.store(true);
+            }
         }
 
         void onError(std::exception_ptr ex) override
         {
-            state.finished = true;
-            state.ex = ex;
+            if(state->finished.load())
+            {
+                return;
+            }
+
+            state->finished.store(true);
+            std::unique_lock<std::mutex> guard(state->locker);
+            state->ex = ex;
         }
 
         void init()
         {
             worker = scheduler->createWorker();
-            auto ssubscription = worker->schedule(std::make_shared<ThreadAction>(this->child, queue, *this, state));
-            this->add(ssubscription);
+            state = std::make_shared<State>(this);
+            state->queue.setLimit(bufferSize);
             this->addChildSubscriptionFromThis();
         }
 
         Scheduler::SchedulerRefType scheduler;
         Scheduler::WorkerRefType worker;
-        std::shared_ptr<MTQueue<T>> queue;
-        State state;
+        StateRefType state;
         size_t bufferSize;
     };
 

@@ -26,23 +26,21 @@ public:
     bool isUnsubscribe() override
     {
         bool res = true;
-        (*mut).lock();
+        std::lock_guard<std::mutex> l(*mut);
         if(auto spt = subscriptionPtr.lock())
         {
             res = spt->isUnsubscribe();
         }
-        (*mut).unlock();
         return res;
     }
 
     void unsubscribe() override
     {
-        (*mut).lock();
+        std::lock_guard<std::mutex> l(*mut);
         if(auto spt = subscriptionPtr.lock())
         {
             spt->unsubscribe();
         }
-        (*mut).unlock();
     }
 private:
     std::unique_ptr<std::mutex> mut;

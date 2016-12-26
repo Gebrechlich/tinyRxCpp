@@ -3,7 +3,6 @@
 #include "Operator.hpp"
 #include <type_traits>
 #include <map>
-#include <mutex>
 
 template<typename T, typename KeySelector, typename ValueSelector>
 using MapT = std::map<typename std::result_of<KeySelector(const T&)>::type,
@@ -33,14 +32,12 @@ class OperatorToMap : public Operator<T, MapT<T,KeySelector,ValueSelector>>
         {
             auto key = (*keySelector)(t);
             auto value = (*valueSelector)(t);
-            std::lock_guard<std::mutex> ul(mut);
             auto prev = (map.find(key) == map.end() ? value : map[key]);
             map[key] = (*valuePrevSelector)(value, prev);
         }
 
         void onComplete() override
         {
-            std::lock_guard<std::mutex> ul(mut);
             this->child->onNext(map);
             this->child->onComplete();
         }
@@ -49,7 +46,6 @@ class OperatorToMap : public Operator<T, MapT<T,KeySelector,ValueSelector>>
         ValueSelectorType valueSelector;
         ValuePrevSelectorType valuePrevSelector;
         MapType map;
-        std::mutex mut;
     };
 
 public:
