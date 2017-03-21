@@ -45,11 +45,10 @@ class OperatorObserveOn : public Operator<T,T>
 
                     bool terminate = checkTerminateState(done, empty, valuesCount, state->locker);
 
-                    if(terminate || state->queue.empty())
+                    if(terminate)
                     {
                         return;
                     }
-
                     T v;
                     bool res = (state->queue).tryPop(v);
                     if(res)

@@ -12,19 +12,19 @@ class OperatorSynchronize : public Operator<T,T>
 
     struct SynchronizeSubscriber : public CompositeSubscriber<T,T>
     {
-        SynchronizeSubscriber(ThisSubscriberType p, L lock) :
-            CompositeSubscriber<T,T>(p), lock(lock)
+        SynchronizeSubscriber(ThisSubscriberType p) :
+            CompositeSubscriber<T,T>(p)
         {}
 
         void onNext(const T& t) override
         {
-            std::lock_guard<std::mutex> ul(lock);
+            std::lock_guard<L> ul(lock);
             this->child->onNext(t);
         }
 
         void onComplete() override
         {
-            std::lock_guard<std::mutex> ul(lock);
+            std::lock_guard<L> ul(lock);
             this->child->onComplete();
         }
 
@@ -32,6 +32,7 @@ class OperatorSynchronize : public Operator<T,T>
     };
 
 public:
+
     SourceSubscriberType operator()(const ThisSubscriberType& t) override
     {
         auto subs = std::make_shared<SynchronizeSubscriber>(t);

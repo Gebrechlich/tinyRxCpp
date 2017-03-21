@@ -303,7 +303,7 @@ public:
 
     Observable<T> synchronize()
     {
-       return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorSynchronize<T,std::mutex>>(std::mutex())));
+       return lift(std::unique_ptr<Operator<T, T>>(make_unique<OperatorSynchronize<T,std::mutex>>()));
     }
 
 protected:
@@ -506,7 +506,7 @@ public:
     }
 
     template<typename Rep, typename Period>
-    static Observable<size_t> time(const std::chrono::duration<Rep, Period>&  delay)
+    static Observable<size_t> timer(const std::chrono::duration<Rep, Period>&  delay)
     {
         return interval(std::chrono::duration<Rep, Period>(delay), std::chrono::duration<Rep, Period>(0), 1);
     }

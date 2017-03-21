@@ -11,7 +11,7 @@ public:
 
     void operator()(const SubscriberPtrType<T>& t) override
     {
-        for(T i = start; i < count && !t->isUnsubscribe(); ++i)
+        for(T i = start; count > 0 && !t->isUnsubscribe(); ++i, --count)
         {
             t->onNext(i);
         }

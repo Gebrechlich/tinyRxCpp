@@ -19,7 +19,6 @@ public:
                                   size_t count = std::numeric_limits<size_t>::max()) :
         scheduler(std::move(s)), delay(delay), period(period), count(count)
     {
-         worker = std::move(scheduler->createWorker());
     }
 
     struct PeriodicallyAction : public Action0
@@ -39,13 +38,15 @@ public:
 
     void operator()(const ThisSubscriberType& s) override
     {
+        auto worker = std::move(scheduler->createWorker());
         auto ssubscription = worker->schedulePeriodically(std::make_shared<PeriodicallyAction>(s),delay, period, count);
+        workers.push_back(std::move(worker));
         s->add(ssubscription);
     }
 
 private:
     Scheduler::SchedulerRefType scheduler;
-    Scheduler::WorkerRefType worker;
+    std::vector<Scheduler::WorkerRefType> workers; //keep refrences to workers
     const std::chrono::duration<Rep, Period> delay;
     const std::chrono::duration<Rep, Period> period;
     size_t count;
