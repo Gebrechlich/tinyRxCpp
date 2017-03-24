@@ -1,6 +1,7 @@
 #ifndef NEWTHREADSCHEDULER
 #define NEWTHREADSCHEDULER
 #include "../Scheduler.hpp"
+#include "../utils/ThreadPoolExecutor.hpp"
 #include <thread>
 
 class NewThreadScheduler : public Scheduler
@@ -17,30 +18,16 @@ protected:
     class NewThreadWorker : public Scheduler::Worker
     {
     public:
-        ~NewThreadWorker()
-        {
-            if(workThread.joinable())
-            {
-                workThread.detach();
-            }
-        }
+        NewThreadWorker() : executor(1)
+        {}
+
         SubscriptionPtrType scheduleInteranal(ActionRefType action) override
         {
-            realAction = action;
-            workThread = std::thread(&NewThreadWorker::run, this);
-            //workThread.detach();
+            executor.submit(action);
             return nullptr;
         }
     private:
-        virtual void run()
-        {
-            if(realAction)
-            {
-                (*realAction)();
-            }
-        }
-        std::thread workThread;
-        ActionRefType realAction;
+        ThreadPoolExecutor executor;
     };
 };
 
